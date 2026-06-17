@@ -33,9 +33,9 @@ async def lifespan(app: FastAPI):
     try:
         embed = get_embed_service()
         await embed.embed_batch(["warmup"])
-        logger.info("Ollama embedding model warmed up")
+        logger.info("Local embedding model warmed up")
     except Exception as exc:
-        logger.warning("Embed warmup skipped (Ollama may be unavailable): %s", exc)
+        logger.warning("Embed warmup skipped: %s", exc)
 
     logger.info("CodeBase Oracle API ready")
     yield

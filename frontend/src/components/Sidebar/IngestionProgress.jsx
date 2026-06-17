@@ -1,5 +1,12 @@
-export default function IngestionProgress({ status, progress, currentFile, error }) {
+export default function IngestionProgress({ status, progress, phase, currentFile, error }) {
   const percent = Math.round((progress || 0) * 100)
+
+  const phaseLabel = {
+    chunking: 'Chunking',
+    embedding: 'Embedding',
+    bm25: 'Indexing',
+    completed: 'Complete',
+  }[phase] || null
 
   return (
     <div className="ingestion-progress">
@@ -23,7 +30,9 @@ export default function IngestionProgress({ status, progress, currentFile, error
         )}
         {status === 'running' && (
           <>
-            <span className="progress-label">{percent}%</span>
+            <span className="progress-label">
+              {phaseLabel ? `${phaseLabel} · ${percent}%` : `${percent}%`}
+            </span>
             {currentFile && (
               <span className="progress-file" title={currentFile}>
                 {currentFile}

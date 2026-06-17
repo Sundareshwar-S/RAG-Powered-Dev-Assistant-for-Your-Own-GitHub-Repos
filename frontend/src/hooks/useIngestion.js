@@ -16,6 +16,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 export function useIngestion(onComplete) {
   const [status, setStatus] = useState('idle')   // 'idle' | 'running' | 'completed' | 'failed'
   const [progress, setProgress] = useState(0)
+  const [phase, setPhase] = useState('')
   const [currentFile, setCurrentFile] = useState('')
   const [error, setError] = useState(null)
   const [jobId, setJobId] = useState(null)
@@ -50,6 +51,7 @@ export function useIngestion(onComplete) {
       }
 
       setProgress(data.progress ?? 0)
+      setPhase(data.phase ?? '')
       setCurrentFile(data.current_file ?? '')
       setStatus(data.status ?? 'running')
 
@@ -76,6 +78,7 @@ export function useIngestion(onComplete) {
   const startIngestion = useCallback(async (repoUrl, branch = 'main') => {
     setStatus('running')
     setProgress(0)
+    setPhase('')
     setCurrentFile('')
     setError(null)
     setJobId(null)
@@ -97,6 +100,7 @@ export function useIngestion(onComplete) {
     }
     setStatus('idle')
     setProgress(0)
+    setPhase('')
     setCurrentFile('')
     setError(null)
     setJobId(null)
@@ -107,6 +111,7 @@ export function useIngestion(onComplete) {
     reset,
     status,
     progress,
+    phase,
     currentFile,
     error,
     jobId,

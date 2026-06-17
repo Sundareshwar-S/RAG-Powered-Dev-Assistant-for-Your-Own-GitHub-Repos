@@ -13,8 +13,12 @@ class Settings(BaseSettings):
     DEFAULT_LLM_MODEL: str = "qwen2.5-coder:7b"
     OLLAMA_NUM_CTX: int = 2048
     EMBED_BATCH_SIZE: int = 8
+    EMBED_LOCAL_MODEL: str = "nomic-ai/nomic-embed-text-v1"
+    EMBED_LOCAL_BATCH_SIZE: int = 64
+    EMBED_LOCAL_DEVICE: str = "cpu"
     EMBED_DIM: int = 768
     EMBED_KEEP_ALIVE: str = "30m"
+    CHROMA_UPSERT_BATCH_SIZE: int = 500
     OLLAMA_CHAT_KEEP_ALIVE: str = "10m"
     OLLAMA_READ_TIMEOUT: float = 600.0
     SMALL_CORPUS_THRESHOLD: int = 20

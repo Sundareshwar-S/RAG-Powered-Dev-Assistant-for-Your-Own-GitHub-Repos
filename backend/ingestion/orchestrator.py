@@ -5,15 +5,14 @@ Pipeline
 1. Clone / pull the repo via :class:`GitCloner`.
 2. Walk all supported source files via :class:`FileWalker`.
 3. Chunk each file into semantic units via :class:`ASTChunker`.
-4. Embed all chunks in batches via :class:`EmbeddingService`.
-5. Write chunks + embeddings to ChromaDB via :class:`ChromaWriter`.
-6. Build (or reload) the BM25 keyword index via :class:`BM25Builder`.
+4. Embed chunks in batches and upsert incrementally to ChromaDB.
+5. Build (or reload) the BM25 keyword index via :class:`BM25Builder`.
 
 Progress reporting
 ------------------
-An optional ``progress_callback(current: int, total: int)`` coroutine is
-called after each file is processed so callers (e.g. the SSE endpoint) can
-stream live progress updates.
+An optional ``progress_callback(phase, progress, label)`` coroutine is
+called during chunking, embedding, and BM25 build so callers (e.g. the SSE
+endpoint) can stream live progress updates.
 """
 from __future__ import annotations
 
@@ -21,6 +20,7 @@ import hashlib
 from collections.abc import Awaitable, Callable
 from typing import Optional
 
+from core.config import settings
 from ingestion.ast_chunker import ASTChunker
 from ingestion.bm25_builder import BM25Builder
 from ingestion.chroma_writer import ChromaWriter
@@ -31,7 +31,11 @@ from core.logger import get_logger
 
 logger = get_logger(__name__)
 
-ProgressCallback = Optional[Callable[[int, int], Awaitable[None]]]
+ProgressCallback = Optional[Callable[[str, float, str], Awaitable[None]]]
+
+CHUNKING_WEIGHT = 0.20
+EMBEDDING_WEIGHT = 0.70
+BM25_WEIGHT = 0.10
 
 
 class IngestionOrchestrator:
@@ -92,7 +96,12 @@ class IngestionOrchestrator:
                 logger.warning("Skipping %s: %s", rel_path, exc)
 
             if progress_callback is not None:
-                await progress_callback(idx + 1, total_files)
+                chunk_progress = CHUNKING_WEIGHT * (idx + 1) / max(total_files, 1)
+                await progress_callback(
+                    "chunking",
+                    chunk_progress,
+                    f"Chunking files {idx + 1}/{total_files}",
+                )
 
         all_chunks = [c for c in all_chunks if c.get("text", "").strip()]
 
@@ -107,19 +116,38 @@ class IngestionOrchestrator:
             }
 
         # ------------------------------------------------------------------
-        # Step 4: Embed all chunks
+        # Step 4: Embed + upsert in pipelined batches
         # ------------------------------------------------------------------
-        texts = [c["text"] for c in all_chunks]
-        embeddings = await self._embed.embed_batch(texts)
+        batch_size = settings.EMBED_LOCAL_BATCH_SIZE
+        total_chunks = len(all_chunks)
+        indexed = 0
+
+        for batch_start in range(0, total_chunks, batch_size):
+            batch_chunks = all_chunks[batch_start : batch_start + batch_size]
+            texts = [c["text"] for c in batch_chunks]
+            embeddings = await self._embed.embed_batch(texts)
+            self._chroma.upsert(collection_name, batch_chunks, embeddings)
+            indexed += len(batch_chunks)
+
+            if progress_callback is not None:
+                embed_fraction = indexed / total_chunks
+                embed_progress = CHUNKING_WEIGHT + EMBEDDING_WEIGHT * embed_fraction
+                await progress_callback(
+                    "embedding",
+                    embed_progress,
+                    f"Embedding chunks {indexed}/{total_chunks}",
+                )
 
         # ------------------------------------------------------------------
-        # Step 5: Write to ChromaDB
+        # Step 5: Build / reload BM25 index
         # ------------------------------------------------------------------
-        self._chroma.upsert(collection_name, all_chunks, embeddings)
+        if progress_callback is not None:
+            await progress_callback(
+                "bm25",
+                CHUNKING_WEIGHT + EMBEDDING_WEIGHT,
+                "Building search index",
+            )
 
-        # ------------------------------------------------------------------
-        # Step 6: Build / reload BM25 index
-        # ------------------------------------------------------------------
         self._bm25.build_index(collection_name, self._chroma.client)
 
         # Warm the in-memory BM25 cache so the first query avoids disk rebuild.
@@ -127,14 +155,17 @@ class IngestionOrchestrator:
 
         get_bm25_data(collection_name, self._chroma.client)
 
+        if progress_callback is not None:
+            await progress_callback("bm25", 1.0, "Indexing complete")
+
         logger.info(
             "[%s] Ingestion complete — %d chunks in '%s'",
             repo_id,
-            len(all_chunks),
+            indexed,
             collection_name,
         )
         return {
             "repo_id": repo_id,
             "collection": collection_name,
-            "chunks_indexed": len(all_chunks),
+            "chunks_indexed": indexed,
         }

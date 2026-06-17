@@ -7,7 +7,7 @@ export default function RepoManager({ onIngestComplete }) {
   const [branch, setBranch] = useState('main')
   const [conflict, setConflict] = useState(null)
 
-  const { startIngestion, reset, status, progress, currentFile, error, isIngesting } =
+  const { startIngestion, reset, status, progress, phase, currentFile, error, isIngesting } =
     useIngestion(() => {
       if (onIngestComplete) onIngestComplete()
     })
@@ -94,6 +94,7 @@ export default function RepoManager({ onIngestComplete }) {
         <IngestionProgress
           status={status}
           progress={progress}
+          phase={phase}
           currentFile={currentFile}
           error={error}
         />

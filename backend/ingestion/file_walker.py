@@ -18,7 +18,21 @@ SUPPORTED_EXTENSIONS: dict[str, str] = {
 }
 
 SKIP_DIRS: frozenset[str] = frozenset(
-    {".git", "node_modules", "__pycache__", "venv", ".venv"}
+    {
+        ".git",
+        "node_modules",
+        "__pycache__",
+        "venv",
+        ".venv",
+        "dist",
+        "build",
+        "target",
+        "coverage",
+        ".tox",
+        "vendor",
+        ".next",
+        "out",
+    }
 )
 
 

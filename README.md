@@ -1,6 +1,6 @@
 # CodeBase Oracle
 
-CodeBase Oracle is a local RAG-powered dev assistant for your own GitHub repositories. It clones a repo, splits source files into AST-aware code chunks with tree-sitter, embeds them with Ollama (`nomic-embed-text`), and stores vectors in ChromaDB. When you ask a question, a hybrid retriever combines BM25 keyword search, dense vector search, reciprocal rank fusion (RRF), and cross-encoder reranking to find the most relevant code, then streams an answer from a local LLM (default: Qwen2.5-Coder 7B). A React UI handles repo indexing, SSE ingestion progress, WebSocket chat, and source code cards with file paths and line numbers.
+CodeBase Oracle is a local RAG-powered dev assistant for your own GitHub repositories. It clones a repo, splits source files into AST-aware code chunks with tree-sitter, embeds them locally with sentence-transformers (`nomic-ai/nomic-embed-text-v1`, 768-dim), and stores vectors in ChromaDB. When you ask a question, a hybrid retriever combines BM25 keyword search, dense vector search, reciprocal rank fusion (RRF), and cross-encoder reranking to find the most relevant code, then streams an answer from a local LLM via Ollama (default: Qwen2.5-Coder 7B). A React UI handles repo indexing, SSE ingestion progress, WebSocket chat, and source code cards with file paths and line numbers.
 
 ---
 
@@ -22,7 +22,7 @@ CodeBase Oracle is a local RAG-powered dev assistant for your own GitHub reposit
          ─────────────►              │              │
                       │  clone repo  │              │
                       │  AST chunk   │              │
-                      │  embed ──────┼──────────────►│ nomic-embed-text
+                      │  embed (local)              │
                       │  upsert ────►│ vectors      │
                       │  BM25 cache  │              │
                       │  (bm25_cache/)             │
@@ -194,9 +194,12 @@ Copy [`.env.example`](.env.example) to `.env`. Never commit `.env`.
 | Variable | Default (Docker) | Purpose |
 |----------|------------------|---------|
 | `GITHUB_TOKEN` | *(empty)* | Private repo clone; GitHub size check |
-| `OLLAMA_URL` | `http://ollama:11434` | LLM + embedding inference |
+| `OLLAMA_URL` | `http://ollama:11434` | LLM chat inference (embeddings run in-process in the backend) |
 | `CHROMA_HOST` | `http://chroma:8000` | ChromaDB HTTP API (internal hostname) |
 | `DEFAULT_LLM_MODEL` | `qwen2.5-coder:7b` | Default chat model |
+| `EMBED_LOCAL_MODEL` | `nomic-ai/nomic-embed-text-v1` | Local sentence-transformers embed model (768-dim) |
+| `EMBED_LOCAL_BATCH_SIZE` | `64` | In-process embed batch size during ingest/query |
+| `EMBED_LOCAL_DEVICE` | `cpu` | Device for local embeddings (`cpu` or `cuda`) |
 | `MAX_REPO_SIZE_MB` | `500` | Reject repos larger than this |
 | `BM25_CACHE_DIR` | `/bm25_cache` | Persistent BM25 JSON cache directory |
 | `LOG_LEVEL` | `info` | Logging verbosity |
@@ -213,7 +216,9 @@ Copy [`.env.example`](.env.example) to `.env`. Never commit `.env`.
 | `qwen2.5-coder:7b` | ~6 GB | Default code LLM (CPU/low-VRAM friendly) |
 | `qwen2.5-coder:14b` | ~11 GB Q4 | Optional high-VRAM alternative |
 | `llama3:8b` | ~4.7 GB | Alternative chat model (UI selector) |
-| `nomic-embed-text` | ~0.3 GB | 768-dim embeddings, 8192 token context |
+| `nomic-embed-text` | ~0.3 GB | Legacy Ollama embed fallback (primary path is local `nomic-ai/nomic-embed-text-v1`) |
+
+**Ingest tuning:** Large repos (10k+ chunks) embed in-process in the backend — no per-chunk Ollama HTTP. Increase `EMBED_LOCAL_BATCH_SIZE` (e.g. `128`) on machines with more RAM for faster indexing. SSE progress reports three phases: chunking (0–20%), embedding (20–90%), BM25 build (90–100%).
 
 ---
 

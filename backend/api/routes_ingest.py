@@ -110,9 +110,13 @@ async def _run_ingest(
             embed_service=embed_service,
         )
 
-        async def _progress(current: int, total: int) -> None:
-            progress = current / max(total, 1)
-            job_store.update_job(job_id, progress=progress, current_file=f"{current}/{total}")
+        async def _progress(phase: str, progress: float, label: str) -> None:
+            job_store.update_job(
+                job_id,
+                progress=progress,
+                current_file=label,
+                phase=phase,
+            )
 
         result = await orchestrator.ingest_repo(
             repo_url=repo_url,
@@ -178,6 +182,7 @@ async def _sse_generator(job_id: str) -> AsyncIterator[str]:
                 "job_id": job_id,
                 "status": job["status"],
                 "progress": job["progress"],
+                "phase": job.get("phase", ""),
                 "current_file": job["current_file"],
                 "error": job["error"],
             }

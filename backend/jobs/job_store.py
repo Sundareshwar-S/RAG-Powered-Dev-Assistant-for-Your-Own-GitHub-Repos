@@ -15,7 +15,8 @@ Each job is stored as a plain dict:
         "repo_id":      str,          # md5(repo_url)[:8]
         "status":       str,          # "running" | "completed" | "failed"
         "progress":     float,        # 0.0 – 1.0
-        "current_file": str,          # most recent file being processed
+        "phase":        str,          # "chunking" | "embedding" | "bm25" | ""
+        "current_file": str,          # human-readable progress label
         "error":        str | None,   # set on failure
     }
 """
@@ -35,6 +36,7 @@ def create_job(job_id: str, repo_id: str) -> dict:
         "repo_id": repo_id,
         "status": "running",
         "progress": 0.0,
+        "phase": "",
         "current_file": "",
         "error": None,
     }
@@ -43,13 +45,20 @@ def create_job(job_id: str, repo_id: str) -> dict:
     return dict(record)
 
 
-def update_job(job_id: str, progress: float, current_file: str = "") -> None:
-    """Update progress and current file for a running job."""
+def update_job(
+    job_id: str,
+    progress: float,
+    current_file: str = "",
+    phase: str = "",
+) -> None:
+    """Update progress, phase, and label for a running job."""
     with _lock:
         job = _jobs.get(job_id)
         if job is not None:
             job["progress"] = float(progress)
             job["current_file"] = current_file
+            if phase:
+                job["phase"] = phase
 
 
 def complete_job(job_id: str) -> None:
@@ -59,6 +68,7 @@ def complete_job(job_id: str) -> None:
         if job is not None:
             job["status"] = "completed"
             job["progress"] = 1.0
+            job["phase"] = "completed"
             job["current_file"] = ""
 
 

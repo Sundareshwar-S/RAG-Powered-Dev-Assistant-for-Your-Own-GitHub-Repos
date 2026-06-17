@@ -8,9 +8,9 @@ Runs the full ingestion pipeline against a small public GitHub repository
 
 Requirements to run
 -------------------
-- Ollama must be reachable at $OLLAMA_URL (default: http://localhost:11434)
-  with ``nomic-embed-text`` already pulled.
 - Internet access to clone from GitHub.
+- Local embedding model ``nomic-ai/nomic-embed-text-v1`` (pre-downloaded in
+  the backend Docker image, or pulled on first run when testing on host).
 
 Run with:
     pytest tests/test_phase1_integration.py -v -s -m integration
@@ -129,7 +129,7 @@ def test_file_walker_skips_excluded_dirs(tmp_path: Path) -> None:
     (tmp_path / "lib.py").write_text("y = 2")
 
     # Create files that should be skipped
-    for skip in (".git", "node_modules", "__pycache__", "venv", ".venv"):
+    for skip in (".git", "node_modules", "__pycache__", "venv", ".venv", "dist", "build"):
         skip_dir = tmp_path / skip
         skip_dir.mkdir()
         (skip_dir / "evil.py").write_text("evil = True")
@@ -140,7 +140,7 @@ def test_file_walker_skips_excluded_dirs(tmp_path: Path) -> None:
 
     assert len(found_paths) == 2, f"Expected 2 files, got: {found_paths}"
     assert all(
-        not any(skip in p for skip in (".git", "node_modules", "__pycache__", "venv"))
+        not any(skip in p for skip in (".git", "node_modules", "__pycache__", "venv", "dist"))
         for p in found_paths
     )
 
