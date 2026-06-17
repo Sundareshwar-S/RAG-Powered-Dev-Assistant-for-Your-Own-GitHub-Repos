@@ -50,7 +50,7 @@ class ChromaWriter:
         )
 
         ids = [str(uuid.uuid4()) for _ in chunks]
-        documents = [c["text"] for c in chunks]
+        documents = [c.get("embed_text", c["text"]) for c in chunks]
         metadatas: list[dict[str, Any]] = [
             {
                 "file_path": c["file_path"],
@@ -59,6 +59,7 @@ class ChromaWriter:
                 "start_line": c["start_line"],
                 "end_line": c["end_line"],
                 "symbol_name": c["symbol_name"],
+                "source_text": c["text"],
             }
             for c in chunks
         ]

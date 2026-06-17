@@ -94,7 +94,7 @@ async def test_orchestrator_pipelines_incremental_upserts(tmp_path: Path) -> Non
             branch="main",
         )
 
-    assert result["chunks_indexed"] == 10
+    assert result["chunks_indexed"] == 11
     assert mock_embed.call_count >= 1
     assert mock_upsert.call_count >= 1
     assert mock_upsert.call_count == mock_embed.call_count

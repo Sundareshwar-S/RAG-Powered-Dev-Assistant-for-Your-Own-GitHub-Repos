@@ -7,6 +7,7 @@ import tiktoken
 
 from core.config import settings
 from core.logger import get_logger
+from retrieval.query_intent import is_structure_query
 
 logger = get_logger(__name__)
 
@@ -16,12 +17,6 @@ _PROMPT_FORMATTING_OVERHEAD = 600
 MIN_DENSE_SCORE_THRESHOLD = 0.35
 
 MIN_SIMILARITY_THRESHOLD = 0.10
-
-_OVERVIEW_RE = re.compile(
-    r"\b(what(?:'s|'s| is) (?:in|there in) (?:the )?repo|overview|structure|"
-    r"what files|main modules|components|layout)\b",
-    re.IGNORECASE,
-)
 
 _CONVERSATIONAL_RE = re.compile(
     r"^(hi|hello|hey|howdy|thanks|thank you|bye|goodbye|good morning|good afternoon"
@@ -46,18 +41,17 @@ question, say so explicitly — do not guess or fabricate code.
 - Prefer quoting short, relevant snippets over paraphrasing.
 - Format code examples in fenced markdown code blocks with the language tag.
 - If multiple files are relevant, address each one separately.
-- When asked about repo contents or structure, enumerate all indexed files and \
-modules from the provided chunks before diving into implementation details.\
+- When an authoritative file index section is provided, treat it as the complete \
+list of indexed files for the requested scope. Do not infer filenames from import \
+statements or code snippets.
+- When asked about repo contents or structure, enumerate every file from the \
+authoritative index before discussing implementation details.\
 """
 
 
 def context_token_limit() -> int:
     """Chunk token budget derived from OLLAMA_NUM_CTX."""
     return settings.OLLAMA_NUM_CTX - 1200
-
-
-def is_overview_query(query: str) -> bool:
-    return bool(_OVERVIEW_RE.search(query.strip()))
 
 
 def is_conversational_query(query: str) -> bool:
@@ -86,6 +80,9 @@ def has_sufficient_context(
     if not chunks:
         return False
 
+    if any(c.get("chunk_type") == "file_manifest" for c in chunks):
+        return True
+
     max_rerank = max(c.get("score", 0.0) for c in chunks)
     if max_rerank >= MIN_SIMILARITY_THRESHOLD:
         return True
@@ -110,47 +107,42 @@ def _format_chunk(chunk: dict, index: int) -> str:
     return f"{header}\n```{language}\n{text}\n```"
 
 
-def _format_chunk_compact(chunk: dict, index: int) -> str:
-    """Compact chunk summary for overview questions (paths + symbols, not full code)."""
-    file_path = chunk.get("file_path", "unknown")
-    start_line = chunk.get("start_line", "?")
-    end_line = chunk.get("end_line", "?")
-    chunk_type = chunk.get("chunk_type", "snippet")
-    symbol_name = chunk.get("symbol_name", "")
-    text = chunk.get("text", "")
-    preview = text[:240].replace("\n", " ")
-    if len(text) > 240:
-        preview += "…"
-    symbol_part = f" symbol={symbol_name}" if symbol_name else ""
+def _format_structure_index(chunk: dict) -> str:
+    """Format an authoritative file-index chunk for structure questions."""
     return (
-        f"[Chunk {index}] File: {file_path} Lines {start_line}-{end_line} "
-        f"({chunk_type}{symbol_part})\nPreview: {preview}"
+        "Authoritative file index (indexed files only):\n"
+        f"{chunk.get('text', '')}"
     )
 
 
 def build_prompt(query: str, chunks: list[dict]) -> list[dict]:
     """Build an Ollama ``/api/chat`` messages list from *query* and *chunks*."""
     budget = context_token_limit()
-    overview = is_overview_query(query)
+    structure = is_structure_query(query)
 
-    if overview:
-        trimmed = chunks
-        formatter = _format_chunk_compact
+    if structure:
+        index_chunks = [
+            c for c in chunks if c.get("chunk_type") == "file_manifest"
+        ]
+        if not index_chunks:
+            index_chunks = chunks
+        trimmed = _trim_structure_chunks(index_chunks, budget)
+        chunk_blocks = "\n\n".join(
+            _format_structure_index(chunk) for chunk in trimmed
+        )
     else:
         formatter = _format_chunk
         trimmed = _trim_to_budget(chunks, budget)
-
-    if not overview and len(trimmed) < len(chunks):
-        logger.info(
-            "Context guard: trimmed %d → %d chunks to stay under %d tokens",
-            len(chunks),
-            len(trimmed),
-            budget,
+        if len(trimmed) < len(chunks):
+            logger.info(
+                "Context guard: trimmed %d → %d chunks to stay under %d tokens",
+                len(chunks),
+                len(trimmed),
+                budget,
+            )
+        chunk_blocks = "\n\n".join(
+            formatter(chunk, idx) for idx, chunk in enumerate(trimmed, start=1)
         )
-
-    chunk_blocks = "\n\n".join(
-        formatter(chunk, idx) for idx, chunk in enumerate(trimmed, start=1)
-    )
 
     user_content = (
         f"Using the following code context, please answer the question.\n\n"
@@ -162,6 +154,20 @@ def build_prompt(query: str, chunks: list[dict]) -> list[dict]:
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": user_content},
     ]
+
+
+def _trim_structure_chunks(chunks: list[dict], budget: int) -> list[dict]:
+    """Keep structure index chunks within the token budget."""
+    total = 0
+    kept: list[dict] = []
+    for chunk in chunks:
+        formatted = _format_structure_index(chunk)
+        tokens = count_tokens(formatted)
+        if total + tokens > budget:
+            break
+        kept.append(chunk)
+        total += tokens
+    return kept or chunks[:1]
 
 
 def _trim_to_budget(chunks: list[dict], budget: int) -> list[dict]:

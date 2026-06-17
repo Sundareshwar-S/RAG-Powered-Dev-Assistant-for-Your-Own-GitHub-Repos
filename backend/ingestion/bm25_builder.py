@@ -76,9 +76,13 @@ class BM25Builder:
             results.get("documents") or [],
             results.get("metadatas") or [],
         ):
-            entry: dict[str, Any] = {"text": text}
-            if meta:
-                entry.update(meta)
+            meta = meta or {}
+            display_text = meta.get("source_text") or text
+            entry: dict[str, Any] = {
+                "text": display_text,
+                "search_text": text,
+            }
+            entry.update(meta)
             corpus.append(entry)
 
         logger.info("Fetched %d documents from '%s'", len(corpus), collection_name)
@@ -88,7 +92,9 @@ class BM25Builder:
     def _build_and_persist(
         corpus: list[dict], cache_path: Path
     ) -> BM25Okapi:
-        tokenized = [doc["text"].lower().split() for doc in corpus]
+        tokenized = [
+            doc.get("search_text", doc["text"]).lower().split() for doc in corpus
+        ]
         index = BM25Okapi(tokenized)
 
         cache_path.parent.mkdir(parents=True, exist_ok=True)

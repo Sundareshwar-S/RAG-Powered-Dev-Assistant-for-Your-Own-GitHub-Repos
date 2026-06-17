@@ -1,12 +1,12 @@
 """Hybrid retriever: dense + sparse + RRF + cross-encoder reranking.
 
-For small corpora (<= SMALL_CORPUS_THRESHOLD) or overview-style questions,
-returns all indexed chunks immediately without Ollama embed or cross-encoder.
+For structure queries, returns a compact authoritative file index.
+For small corpora (<= SMALL_CORPUS_THRESHOLD), returns all indexed chunks
+without Ollama embed or cross-encoder.
 """
 from __future__ import annotations
 
 import asyncio
-import re
 import time
 from collections.abc import Awaitable, Callable
 
@@ -19,9 +19,11 @@ from core.debug_log import log_timing
 from core.logger import get_logger
 from ingestion.embedding_service import EmbeddingService
 from retrieval.dense_retriever import DenseRetriever
+from retrieval.query_intent import is_structure_query
 from retrieval.reranker import Reranker
 from retrieval.rrf_fusion import merge as rrf_merge
 from retrieval.sparse_retriever import SparseRetriever
+from retrieval.structure_retriever import retrieve_structure_context
 
 logger = get_logger(__name__)
 
@@ -29,18 +31,7 @@ _DENSE_K = 50
 _SPARSE_K = 50
 _FINAL_K = 8
 
-_OVERVIEW_RE = re.compile(
-    r"\b(what(?:'s|'s| is) (?:in|there in) (?:the )?repo|overview|structure|"
-    r"what files|main modules|components|layout)\b",
-    re.IGNORECASE,
-)
-
 StatusCallback = Callable[[str], Awaitable[None]] | None
-
-
-def is_overview_query(query: str) -> bool:
-    """Return True for repo-structure / contents questions."""
-    return bool(_OVERVIEW_RE.search(query.strip()))
 
 
 def sort_corpus_for_overview(corpus: list[dict]) -> list[dict]:
@@ -89,17 +80,49 @@ class HybridRetriever:
         )
 
         corpus_size = self._collection.count()
-        use_fast_path = (
-            corpus_size <= settings.SMALL_CORPUS_THRESHOLD
-            or is_overview_query(query)
-        )
 
-        if use_fast_path:
+        if is_structure_query(query):
+            return await self._retrieve_structure_path(
+                query, corpus_size, status_callback
+            )
+
+        if corpus_size <= settings.SMALL_CORPUS_THRESHOLD:
             return await self._retrieve_fast_path(query, corpus_size, status_callback)
 
         return await self._retrieve_full_pipeline(
             query, final_k, corpus_size, status_callback
         )
+
+    async def _retrieve_structure_path(
+        self,
+        query: str,
+        corpus_size: int,
+        status_callback: StatusCallback,
+    ) -> list[dict]:
+        """Return compact file-index chunks for structure/listing questions."""
+        t0 = time.perf_counter()
+        if status_callback:
+            await status_callback("ranking")
+
+        results = retrieve_structure_context(query, self._corpus)
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        log_timing(
+            "structure_path",
+            elapsed_ms,
+            {
+                "query_prefix": query[:80],
+                "corpus_size": corpus_size,
+                "final": len(results),
+            },
+        )
+        logger.info(
+            "HybridRetriever structure path: corpus=%d final=%d (%.1fms)",
+            corpus_size,
+            len(results),
+            elapsed_ms,
+        )
+        return results
 
     async def _retrieve_fast_path(
         self,

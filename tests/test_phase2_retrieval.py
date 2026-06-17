@@ -448,7 +448,7 @@ class TestHybridRetrieverFastPath:
         )
 
         with patch.object(retriever._reranker, "rerank") as mock_rerank:
-            results = await retriever.retrieve("what's in the repo")
+            results = await retriever.retrieve("how does chunk 5 work")
 
         assert len(results) == 13
         assert all(r["score"] == 1.0 for r in results)
@@ -525,12 +525,21 @@ class TestHybridRetrieverFastPath:
         mock_rerank.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_overview_query_includes_readme_first(self):
+    async def test_structure_query_returns_file_index(self):
         from retrieval.hybrid_retriever import HybridRetriever
 
         corpus = [
             _make_chunk("def foo(): pass", idx=0),
             {**_make_chunk("# My Project", idx=1), "file_path": "README.md"},
+            {
+                "text": "Repository file index:\nREADME.md\nfile_0.py",
+                "file_path": "__manifest__/repo_tree.txt",
+                "language": "plaintext",
+                "chunk_type": "file_manifest",
+                "start_line": 1,
+                "end_line": 3,
+                "symbol_name": "",
+            },
         ]
         bm25_index = BM25Okapi([c["text"].lower().split() for c in corpus])
 
@@ -553,5 +562,6 @@ class TestHybridRetrieverFastPath:
 
         results = await retriever.retrieve("what files are in this repo")
 
-        assert results[0]["file_path"] == "README.md"
+        assert results[0]["chunk_type"] == "file_manifest"
+        assert "README.md" in results[0]["text"]
         mock_embed.embed_batch.assert_not_called()

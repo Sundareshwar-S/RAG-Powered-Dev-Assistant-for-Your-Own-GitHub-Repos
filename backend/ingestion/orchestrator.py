@@ -27,6 +27,7 @@ from ingestion.chroma_writer import ChromaWriter
 from ingestion.embedding_service import EmbeddingService
 from ingestion.file_walker import FileWalker
 from ingestion.git_cloner import GitCloner
+from ingestion.manifest_builder import build_manifest_chunks
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -36,6 +37,17 @@ ProgressCallback = Optional[Callable[[str, float, str], Awaitable[None]]]
 CHUNKING_WEIGHT = 0.20
 EMBEDDING_WEIGHT = 0.70
 BM25_WEIGHT = 0.10
+
+
+def _with_embed_prefix(chunk: dict) -> dict:
+    """Attach searchable embed text while preserving raw source text."""
+    raw = chunk["text"]
+    path = chunk.get("file_path", "")
+    if chunk.get("chunk_type") == "file_manifest" or not path:
+        chunk["embed_text"] = raw
+    else:
+        chunk["embed_text"] = f"File: {path}\n{raw}"
+    return chunk
 
 
 class IngestionOrchestrator:
@@ -105,7 +117,18 @@ class IngestionOrchestrator:
 
         all_chunks = [c for c in all_chunks if c.get("text", "").strip()]
 
-        logger.info("[%s] Total chunks produced: %d", repo_id, len(all_chunks))
+        indexed_paths = [rel_path for rel_path, _, _ in files]
+        manifest_chunks = build_manifest_chunks(indexed_paths)
+        all_chunks.extend(manifest_chunks)
+
+        all_chunks = [_with_embed_prefix(c) for c in all_chunks]
+
+        logger.info(
+            "[%s] Total chunks produced: %d (including %d manifest)",
+            repo_id,
+            len(all_chunks),
+            len(manifest_chunks),
+        )
 
         if not all_chunks:
             logger.warning("[%s] No chunks produced — aborting ingest", repo_id)
@@ -124,7 +147,7 @@ class IngestionOrchestrator:
 
         for batch_start in range(0, total_chunks, batch_size):
             batch_chunks = all_chunks[batch_start : batch_start + batch_size]
-            texts = [c["text"] for c in batch_chunks]
+            texts = [c.get("embed_text", c["text"]) for c in batch_chunks]
             embeddings = await self._embed.embed_batch(texts)
             self._chroma.upsert(collection_name, batch_chunks, embeddings)
             indexed += len(batch_chunks)

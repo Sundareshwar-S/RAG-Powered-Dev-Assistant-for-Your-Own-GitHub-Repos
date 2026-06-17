@@ -84,6 +84,11 @@ async def test_full_ingestion_pipeline(tmp_path: Path) -> None:
     for key in ("file_path", "language", "chunk_type", "start_line", "end_line"):
         assert key in meta, f"Metadata key '{key}' missing from chunk"
 
+    all_meta = collection.get(include=["metadatas"])["metadatas"]
+    assert any(m.get("chunk_type") == "file_manifest" for m in all_meta), (
+        "Expected at least one file_manifest chunk after ingest"
+    )
+
     print(
         f"\n[PASS] Indexed {count} chunks from {TEST_REPO_URL} "
         f"into '{collection_name}'"
