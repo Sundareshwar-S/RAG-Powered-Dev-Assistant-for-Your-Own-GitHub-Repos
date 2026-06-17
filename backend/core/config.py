@@ -1,0 +1,29 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    OLLAMA_URL: str = "http://ollama:11434"
+    CHROMA_HOST: str = "http://chroma:8000"
+    DEFAULT_LLM_MODEL: str = "qwen2.5-coder:7b"
+    OLLAMA_NUM_CTX: int = 2048
+    EMBED_BATCH_SIZE: int = 8
+    EMBED_DIM: int = 768
+    EMBED_KEEP_ALIVE: str = "30m"
+    OLLAMA_CHAT_KEEP_ALIVE: str = "10m"
+    OLLAMA_READ_TIMEOUT: float = 600.0
+    SMALL_CORPUS_THRESHOLD: int = 20
+    RETRIEVAL_TIMEOUT: float = 60.0
+    DEBUG_TIMING: bool = False
+    MAX_REPO_SIZE_MB: int = 500
+    LOG_LEVEL: str = "info"
+    BM25_CACHE_DIR: str = "/bm25_cache"
+    GITHUB_TOKEN: str = ""
+
+
+settings = Settings()

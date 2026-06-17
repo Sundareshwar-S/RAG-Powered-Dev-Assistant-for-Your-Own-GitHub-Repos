@@ -1,0 +1,121 @@
+services:
+
+  # ─────────────────────────────────────────────────────────────────
+  # Ollama — local LLM + embedding inference
+  # Models are stored in ./ollama_models so they survive container
+  # rebuilds and are not re-downloaded on every cold start.
+  # ─────────────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    # Port not published to host — avoids conflict with a local `ollama serve`.
+    # Services reach Ollama at http://ollama:11434 on the Compose network.
+    expose:
+      - "11434"
+    volumes:
+      - ./ollama_models:/root/.ollama
+    environment:
+      # Single-slot inference; only one model in RAM at a time on low-memory hosts.
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ─────────────────────────────────────────────────────────────────
+  # model-puller — one-shot service that pulls the three required
+  # models after Ollama is healthy, then exits.
+  # restart: "no" prevents infinite re-pull loops.
+  # ─────────────────────────────────────────────────────────────────
+  model-puller:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "ollama pull nomic-embed-text &&
+       ollama pull qwen2.5-coder:7b"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    restart: "no"
+
+  # ─────────────────────────────────────────────────────────────────
+  # ChromaDB — vector store for code embeddings
+  # CRITICAL: Python client and Docker image MUST be the same version.
+  # We are pinned to 0.5.23. Do NOT change to :latest (0.6.x breaks
+  # the wire protocol and causes KeyError: 'dimension' on every query).
+  # ─────────────────────────────────────────────────────────────────
+  chroma:
+    image: chromadb/chroma:0.5.23
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./chroma_data:/chroma_db
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma_db
+      - ANONYMIZED_TELEMETRY=FALSE
+      - CHROMA_SERVER_CORS_ALLOW_ORIGINS=["http://localhost:5173","http://localhost:8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ─────────────────────────────────────────────────────────────────
+  # Backend — FastAPI RAG service
+  # bm25_cache is mounted as a persistent volume so BM25 indexes
+  # survive a container restart (avoids 30-60s rebuild latency).
+  # ─────────────────────────────────────────────────────────────────
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chroma_data:/chroma_db
+      - ./repos_cache:/tmp/repos
+      - ./bm25_cache:/bm25_cache
+      - ./.cursor:/app/.cursor
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - CHROMA_HOST=http://chroma:8000
+      - BM25_CACHE_DIR=/bm25_cache
+      - DEFAULT_LLM_MODEL=qwen2.5-coder:7b
+      - OLLAMA_NUM_CTX=2048
+      - EMBED_BATCH_SIZE=8
+      - EMBED_KEEP_ALIVE=30m
+      - OLLAMA_CHAT_KEEP_ALIVE=10m
+      - OLLAMA_READ_TIMEOUT=600
+      - DEBUG_TIMING=true
+      - LOG_LEVEL=debug
+    depends_on:
+      ollama:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+      model-puller:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ─────────────────────────────────────────────────────────────────
+  # Frontend — Vite + React dev server
+  # ─────────────────────────────────────────────────────────────────
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+      - VITE_WS_BASE_URL=ws://localhost:8000
+    depends_on:
+      backend:
+        condition: service_healthy
