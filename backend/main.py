@@ -1,7 +1,6 @@
 """CodeBase Oracle — FastAPI application entry point."""
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -15,27 +14,25 @@ from api.routes_ingest import router as ingest_router
 from api.routes_query import router as query_router
 from api.routes_repos import router as repos_router
 from core.dependencies import get_embed_service
+from core.config import settings
 from core.limiter import limiter
 from core.logger import get_logger
-from retrieval.reranker import _get_cross_encoder
 
 logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Preload heavy models so the first query does not cold-start."""
-    loop = asyncio.get_event_loop()
-    logger.info("Preloading CrossEncoder reranker model…")
-    await loop.run_in_executor(None, _get_cross_encoder)
-    logger.info("CrossEncoder ready")
-
-    try:
-        embed = get_embed_service()
-        await embed.embed_batch(["warmup"])
-        logger.info("Local embedding model warmed up")
-    except Exception as exc:
-        logger.warning("Embed warmup skipped: %s", exc)
+    """Warm up in-process embed models when configured."""
+    if settings.EMBED_BACKEND != "ollama":
+        try:
+            embed = get_embed_service()
+            await embed.embed_batch(["warmup"], task="document")
+            logger.info("Embedding model warmed up (%s)", settings.EMBED_BACKEND)
+        except Exception as exc:
+            logger.warning("Embed warmup skipped: %s", exc)
+    else:
+        logger.info("Using Ollama for embeddings — skipping in-process warmup")
 
     logger.info("CodeBase Oracle API ready")
     yield

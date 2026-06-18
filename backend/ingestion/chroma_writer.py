@@ -23,8 +23,12 @@ logger = get_logger(__name__)
 class ChromaWriter:
     """Writes code chunks (text + embeddings + metadata) into ChromaDB."""
 
-    def __init__(self, chroma_path: str = "/chroma_db") -> None:
-        self.client = chromadb.PersistentClient(path=chroma_path)
+    def __init__(
+        self,
+        chroma_path: str = "/chroma_db",
+        client: chromadb.PersistentClient | None = None,
+    ) -> None:
+        self.client = client or chromadb.PersistentClient(path=chroma_path)
 
     def upsert(
         self,
@@ -60,6 +64,7 @@ class ChromaWriter:
                 "end_line": c["end_line"],
                 "symbol_name": c["symbol_name"],
                 "source_text": c["text"],
+                "content_hash": c.get("content_hash", ""),
             }
             for c in chunks
         ]

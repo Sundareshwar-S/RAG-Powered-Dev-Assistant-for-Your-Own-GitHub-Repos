@@ -7,7 +7,8 @@ export default function RepoManager({ onIngestComplete }) {
   const [branch, setBranch] = useState('main')
   const [conflict, setConflict] = useState(null)
 
-  const { startIngestion, reset, status, progress, phase, currentFile, error, isIngesting } =
+  const { startIngestion, reset, status, progress, phase, currentFile, error, isIngesting,
+    filesIndexed, chunksIndexed, filesSkipped } =
     useIngestion(() => {
       if (onIngestComplete) onIngestComplete()
     })
@@ -97,6 +98,9 @@ export default function RepoManager({ onIngestComplete }) {
           phase={phase}
           currentFile={currentFile}
           error={error}
+          filesIndexed={filesIndexed}
+          chunksIndexed={chunksIndexed}
+          filesSkipped={filesSkipped}
         />
       )}
     </div>

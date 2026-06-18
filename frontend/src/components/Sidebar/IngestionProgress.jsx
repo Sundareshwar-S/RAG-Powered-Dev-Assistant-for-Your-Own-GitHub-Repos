@@ -1,4 +1,13 @@
-export default function IngestionProgress({ status, progress, phase, currentFile, error }) {
+export default function IngestionProgress({
+  status,
+  progress,
+  phase,
+  currentFile,
+  error,
+  filesIndexed,
+  chunksIndexed,
+  filesSkipped,
+}) {
   const percent = Math.round((progress || 0) * 100)
 
   const phaseLabel = {
@@ -19,9 +28,19 @@ export default function IngestionProgress({ status, progress, phase, currentFile
 
       <div className="progress-meta">
         {status === 'completed' && (
-          <span className="progress-label progress-label--success">
-            ✓ Indexing complete
-          </span>
+          <>
+            <span className="progress-label progress-label--success">
+              ✓ Indexing complete
+            </span>
+            {filesIndexed != null && chunksIndexed != null && (
+              <span className="progress-stats">
+                {filesIndexed.toLocaleString()} files → {chunksIndexed.toLocaleString()} chunks
+                {filesSkipped != null && filesSkipped > 0
+                  ? ` (${filesSkipped.toLocaleString()} assets skipped)`
+                  : ''}
+              </span>
+            )}
+          </>
         )}
         {status === 'failed' && (
           <span className="progress-label progress-label--error">

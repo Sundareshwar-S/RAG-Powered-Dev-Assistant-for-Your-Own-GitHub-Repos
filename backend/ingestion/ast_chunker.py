@@ -8,6 +8,7 @@ Key API notes for tree-sitter 0.23.x:
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import tiktoken
@@ -20,6 +21,7 @@ import tree_sitter_python as ts_python
 import tree_sitter_rust as ts_rust
 import tree_sitter_typescript as ts_typescript
 
+from core.config import settings
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -67,6 +69,32 @@ TARGET_NODE_TYPES: dict[str, frozenset[str]] = {
 
 CHUNK_TOKEN_LIMIT: int = 512
 _TIKTOKEN_ENC = tiktoken.get_encoding("cl100k_base")
+
+DOC_EXTENSIONS: frozenset[str] = frozenset(
+    {".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".ini", ".cfg", ".sh", ".bash"}
+)
+HTML_EXTENSIONS: frozenset[str] = frozenset({".html", ".htm", ".jinja", ".jinja2"})
+CODE_EXTENSIONS: frozenset[str] = frozenset(
+    {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rs"}
+)
+
+# Container nodes: recurse into children for method-level chunks when small.
+CLASS_NODE_TYPES: frozenset[str] = frozenset(
+    {"class_definition", "class_declaration", "impl_item"}
+)
+
+
+def sliding_window_cap_for_file(file_path: str) -> int:
+    """Return max sliding-window chunks for *file_path* (0 means unlimited)."""
+    suffix = Path(file_path).suffix.lower()
+    basename = Path(file_path).name.lower()
+    if suffix in HTML_EXTENSIONS:
+        return settings.HTML_MAX_SLIDING_CHUNKS
+    if suffix in DOC_EXTENSIONS or basename == "readme":
+        return settings.DOC_MAX_SLIDING_CHUNKS
+    if suffix in CODE_EXTENSIONS:
+        return settings.AST_MAX_SLIDING_CHUNKS
+    return settings.HTML_MAX_SLIDING_CHUNKS
 
 
 def count_tokens(text: str) -> int:
@@ -146,11 +174,59 @@ class ASTChunker:
         file_path: str,
         out: list[dict],
     ) -> None:
+        if self.language == "python" and node.type == "if_statement":
+            lines = source.split("\n")
+            start_line = node.start_point[0]
+            end_line = node.end_point[0]
+            text = "\n".join(lines[start_line : end_line + 1])
+            if "__name__" in text and "__main__" in text:
+                if count_tokens(text) <= CHUNK_TOKEN_LIMIT:
+                    out.append(
+                        {
+                            "text": text,
+                            "file_path": file_path,
+                            "language": self.language,
+                            "chunk_type": "main_guard",
+                            "start_line": start_line + 1,
+                            "end_line": end_line + 1,
+                            "symbol_name": "__main__",
+                        }
+                    )
+                else:
+                    out.extend(
+                        self._sliding_window_on_range(
+                            lines,
+                            start_line,
+                            end_line,
+                            file_path,
+                            "main_guard",
+                            "__main__",
+                        )
+                    )
+                return
+
         if node.type in self._target_types:
             lines = source.split("\n")
             start_line = node.start_point[0]
             end_line = node.end_point[0]
             text = "\n".join(lines[start_line : end_line + 1])
+
+            if node.type in CLASS_NODE_TYPES:
+                if count_tokens(text) > CHUNK_TOKEN_LIMIT:
+                    out.extend(
+                        self._sliding_window_on_range(
+                            lines,
+                            start_line,
+                            end_line,
+                            file_path,
+                            node.type,
+                            self._extract_name(node, source),
+                        )
+                    )
+                else:
+                    for child in node.children:
+                        self._traverse(child, source, file_path, out)
+                return
 
             if count_tokens(text) <= CHUNK_TOKEN_LIMIT:
                 out.append(
@@ -164,9 +240,19 @@ class ASTChunker:
                         "symbol_name": self._extract_name(node, source),
                     }
                 )
-                # Do not recurse into matched nodes to avoid duplicate chunks
-                # (e.g. a method inside a class is captured by its own pass).
                 return
+
+            out.extend(
+                self._sliding_window_on_range(
+                    lines,
+                    start_line,
+                    end_line,
+                    file_path,
+                    node.type,
+                    self._extract_name(node, source),
+                )
+            )
+            return
 
         for child in node.children:
             self._traverse(child, source, file_path, out)
@@ -187,25 +273,48 @@ class ASTChunker:
     ) -> list[dict]:
         """Split non-parseable text into overlapping line windows."""
         lines = source.split("\n")
+        return self._sliding_window_on_range(
+            lines, 0, len(lines) - 1, file_path, "sliding_window", ""
+        )
+
+    def _sliding_window_on_range(
+        self,
+        lines: list[str],
+        start_line: int,
+        end_line: int,
+        file_path: str,
+        chunk_type: str,
+        symbol_name: str,
+    ) -> list[dict]:
+        """Split a line range into overlapping windows."""
+        if end_line < start_line:
+            return []
+
         window = 60
         stride = 45
+        max_chunks = sliding_window_cap_for_file(file_path)
         chunks: list[dict] = []
+        i = start_line
 
-        i = 0
-        while i < len(lines):
-            window_lines = lines[i : i + window]
-            text = "\n".join(window_lines)
-            chunks.append(
-                {
-                    "text": text,
-                    "file_path": file_path,
-                    "language": self.language,
-                    "chunk_type": "sliding_window",
-                    "start_line": i + 1,
-                    "end_line": min(i + window, len(lines)),
-                    "symbol_name": "",
-                }
-            )
+        while i <= end_line:
+            if max_chunks > 0 and len(chunks) >= max_chunks:
+                break
+            window_end = min(i + window - 1, end_line)
+            text = "\n".join(lines[i : window_end + 1])
+            if text.strip():
+                chunks.append(
+                    {
+                        "text": text,
+                        "file_path": file_path,
+                        "language": self.language,
+                        "chunk_type": chunk_type,
+                        "start_line": i + 1,
+                        "end_line": window_end + 1,
+                        "symbol_name": symbol_name,
+                    }
+                )
             i += stride
+            if i > end_line:
+                break
 
         return chunks

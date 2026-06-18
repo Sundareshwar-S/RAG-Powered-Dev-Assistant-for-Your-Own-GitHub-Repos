@@ -19,7 +19,9 @@ from core.debug_log import log_timing
 from core.logger import get_logger
 from ingestion.embedding_service import EmbeddingService
 from retrieval.dense_retriever import DenseRetriever
-from retrieval.query_intent import is_structure_query
+from ingestion.manifest_builder import dedupe_indexed_paths
+from retrieval.file_target_retriever import retrieve_file_target_context
+from retrieval.query_intent import extract_target_file, is_structure_query
 from retrieval.reranker import Reranker
 from retrieval.rrf_fusion import merge as rrf_merge
 from retrieval.sparse_retriever import SparseRetriever
@@ -81,6 +83,12 @@ class HybridRetriever:
 
         corpus_size = self._collection.count()
 
+        indexed_paths = dedupe_indexed_paths(self._corpus)
+        if extract_target_file(query, indexed_paths):
+            return await self._retrieve_file_target_path(
+                query, corpus_size, status_callback
+            )
+
         if is_structure_query(query):
             return await self._retrieve_structure_path(
                 query, corpus_size, status_callback
@@ -92,6 +100,37 @@ class HybridRetriever:
         return await self._retrieve_full_pipeline(
             query, final_k, corpus_size, status_callback
         )
+
+    async def _retrieve_file_target_path(
+        self,
+        query: str,
+        corpus_size: int,
+        status_callback: StatusCallback,
+    ) -> list[dict]:
+        """Return all chunks for a file explicitly named in the query."""
+        t0 = time.perf_counter()
+        if status_callback:
+            await status_callback("ranking")
+
+        results = retrieve_file_target_context(query, self._corpus)
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        log_timing(
+            "file_target_path",
+            elapsed_ms,
+            {
+                "query_prefix": query[:80],
+                "corpus_size": corpus_size,
+                "final": len(results),
+            },
+        )
+        logger.info(
+            "HybridRetriever file-target path: corpus=%d final=%d (%.1fms)",
+            corpus_size,
+            len(results),
+            elapsed_ms,
+        )
+        return results
 
     async def _retrieve_structure_path(
         self,
@@ -179,7 +218,7 @@ class HybridRetriever:
 
         t_embed = time.perf_counter()
         query_embeddings = await self._embed_service.embed_batch(
-            [query], keep_alive="0"
+            [query], keep_alive="0", task="query"
         )
         timings["embed_ms"] = (time.perf_counter() - t_embed) * 1000
 

@@ -41,11 +41,14 @@ question, say so explicitly — do not guess or fabricate code.
 - Prefer quoting short, relevant snippets over paraphrasing.
 - Format code examples in fenced markdown code blocks with the language tag.
 - If multiple files are relevant, address each one separately.
-- When an authoritative file index section is provided, treat it as the complete \
-list of indexed files for the requested scope. Do not infer filenames from import \
-statements or code snippets.
-- When asked about repo contents or structure, enumerate every file from the \
-authoritative index before discussing implementation details.\
+- When a repository file index section is provided, treat it as the complete \
+list of searchable source files. If an excluded-assets section is present, \
+mention those folders/files exist on disk but were not indexed (binary plots, \
+model weights, etc.).
+- When asked about repo contents or structure, enumerate indexed files from the \
+file index and note excluded asset folders when listed.
+- When code chunks are provided for a named file, answer from that chunk content. \
+Do not claim a file is empty when its text appears in the provided context.
 """
 
 
@@ -108,9 +111,9 @@ def _format_chunk(chunk: dict, index: int) -> str:
 
 
 def _format_structure_index(chunk: dict) -> str:
-    """Format an authoritative file-index chunk for structure questions."""
+    """Format a file-index chunk for structure questions."""
     return (
-        "Authoritative file index (indexed files only):\n"
+        "Repository file index:\n"
         f"{chunk.get('text', '')}"
     )
 

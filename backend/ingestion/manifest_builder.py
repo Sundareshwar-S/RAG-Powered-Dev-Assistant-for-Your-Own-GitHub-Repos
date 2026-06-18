@@ -7,7 +7,11 @@ MANIFEST_PATH = "__manifest__/repo_tree.txt"
 MAX_PATHS_PER_CHUNK = 400
 
 
-def build_manifest_chunks(indexed_paths: list[str]) -> list[dict]:
+def build_manifest_chunks(
+    indexed_paths: list[str],
+    *,
+    skipped_summary: str = "",
+) -> list[dict]:
     """Return manifest chunk dicts describing the indexed file tree.
 
     For large repos the tree is split into multiple ``file_manifest`` chunks.
@@ -20,8 +24,16 @@ def build_manifest_chunks(indexed_paths: list[str]) -> list[dict]:
     for start in range(0, len(paths), MAX_PATHS_PER_CHUNK):
         batch = paths[start : start + MAX_PATHS_PER_CHUNK]
         tree_text = format_tree(batch)
-        header = "Repository file index (authoritative — indexed files only):\n"
+        header = (
+            "Repository file index (searchable source files indexed for Q&A):\n"
+        )
         text = header + tree_text
+        if skipped_summary and start == 0:
+            text += (
+                "\n\nExcluded from indexing (binary/assets — present on disk but "
+                "not searchable):\n"
+                + skipped_summary
+            )
         chunks.append(
             {
                 "text": text,

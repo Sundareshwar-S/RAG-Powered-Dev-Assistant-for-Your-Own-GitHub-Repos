@@ -38,11 +38,44 @@ class TestQueryIntent:
         assert not is_structure_query("how does authentication work")
         assert not is_structure_query("explain the foo function")
 
+    def test_file_content_queries_not_structure(self) -> None:
+        from retrieval.query_intent import is_structure_query
+
+        assert not is_structure_query("what's inside the readme.md file")
+        assert not is_structure_query("what is inside README.md")
+        assert not is_structure_query("show me app.py")
+        assert not is_structure_query("contents of pipeline.py")
+
+    def test_extract_target_file_case_insensitive(self) -> None:
+        from retrieval.query_intent import extract_target_file
+
+        paths = ["README.md", "app.py", "backend/config.py"]
+        assert extract_target_file("what's inside readme.md", paths) == "README.md"
+        assert extract_target_file("explain backend/config.py", paths) == "backend/config.py"
+
     def test_extract_folder_prefix(self) -> None:
         from retrieval.query_intent import extract_folder_prefix
 
         assert extract_folder_prefix("what files are in the backend folder") == "backend"
         assert extract_folder_prefix("inside the backend directory") == "backend"
+        assert extract_folder_prefix("what's in readme") is None
+        assert extract_folder_prefix("what's the file structure") is None
+        assert extract_folder_prefix("what there in the file structure") is None
+
+    def test_file_structure_returns_repo_wide_tree(self) -> None:
+        from retrieval.structure_retriever import retrieve_structure_context
+
+        corpus = [
+            _make_chunk("backend/config.py"),
+            _make_chunk("notebooks/train.ipynb"),
+        ]
+
+        results = retrieve_structure_context("what there in the file structure", corpus)
+
+        assert len(results) == 1
+        assert "config.py" in results[0]["text"]
+        assert "train.ipynb" in results[0]["text"]
+        assert "file/" not in results[0]["text"] or "No indexed files under file/" not in results[0]["text"]
 
 
 class TestStructureRetriever:

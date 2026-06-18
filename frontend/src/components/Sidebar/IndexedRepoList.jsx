@@ -52,6 +52,11 @@ function RepoCard({ repo, isSelected, onSelect, onDelete }) {
         </span>
         <span className="repo-card__chunks">
           {repo.chunks >= 0 ? `${repo.chunks.toLocaleString()} chunks` : '—'}
+          {repo.chunks >= 0 && repo.chunks <= 30 && (
+            <span className="repo-card__hint" title="Low chunk count — re-index after updating ingest settings">
+              {' '}· low
+            </span>
+          )}
         </span>
       </div>
 

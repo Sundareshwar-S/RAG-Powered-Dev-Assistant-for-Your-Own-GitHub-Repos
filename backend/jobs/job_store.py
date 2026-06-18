@@ -61,7 +61,13 @@ def update_job(
                 job["phase"] = phase
 
 
-def complete_job(job_id: str) -> None:
+def complete_job(
+    job_id: str,
+    *,
+    files_indexed: int | None = None,
+    chunks_indexed: int | None = None,
+    files_skipped: int | None = None,
+) -> None:
     """Mark job as completed at 100 % progress."""
     with _lock:
         job = _jobs.get(job_id)
@@ -70,6 +76,12 @@ def complete_job(job_id: str) -> None:
             job["progress"] = 1.0
             job["phase"] = "completed"
             job["current_file"] = ""
+            if files_indexed is not None:
+                job["files_indexed"] = files_indexed
+            if chunks_indexed is not None:
+                job["chunks_indexed"] = chunks_indexed
+            if files_skipped is not None:
+                job["files_skipped"] = files_skipped
 
 
 def fail_job(job_id: str, error: str) -> None:

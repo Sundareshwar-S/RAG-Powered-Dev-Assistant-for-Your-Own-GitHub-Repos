@@ -1,3 +1,4 @@
+from collections import Counter
 from pathlib import Path
 
 from core.logger import get_logger
@@ -23,6 +24,11 @@ SUPPORTED_EXTENSIONS: dict[str, str] = {
     ".cfg": "plaintext",
     ".sh": "plaintext",
     ".bash": "plaintext",
+    ".html": "plaintext",
+    ".htm": "plaintext",
+    ".jinja": "plaintext",
+    ".jinja2": "plaintext",
+    ".ipynb": "notebook",
 }
 
 # Extensionless files indexed as plaintext when the basename matches exactly.
@@ -30,14 +36,53 @@ SUPPORTED_FILENAMES: dict[str, str] = {
     "dockerfile": "plaintext",
     "makefile": "plaintext",
     "jenkinsfile": "plaintext",
+    "readme": "markdown",
 }
 
-SKIP_EXTENSIONS: frozenset[str] = frozenset(
-    {".html", ".css", ".scss", ".sass", ".less"}
-)
+# Stylesheets are low-value for code search and are not reported as skipped.
+SKIP_EXTENSIONS: frozenset[str] = frozenset({".css", ".scss", ".sass", ".less"})
 
-# Skip files under these relative path segments (low-value static assets).
-SKIP_PATH_SEGMENTS: frozenset[str] = frozenset({"static", "assets"})
+# Binary / media / model artifacts — skipped regardless of directory.
+SKIP_BINARY_EXTENSIONS: frozenset[str] = frozenset(
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".svg",
+        ".ico",
+        ".bmp",
+        ".woff",
+        ".woff2",
+        ".ttf",
+        ".eot",
+        ".mp4",
+        ".mp3",
+        ".wav",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".bz2",
+        ".7z",
+        ".pkl",
+        ".pickle",
+        ".joblib",
+        ".h5",
+        ".hdf5",
+        ".keras",
+        ".pt",
+        ".pth",
+        ".onnx",
+        ".safetensors",
+        ".exe",
+        ".dll",
+        ".so",
+        ".dylib",
+        ".pyc",
+        ".pyo",
+    }
+)
 
 SKIP_DIRS: frozenset[str] = frozenset(
     {
@@ -59,34 +104,74 @@ SKIP_DIRS: frozenset[str] = frozenset(
 
 
 class FileWalker:
-    """Recursively walks a repository directory and returns files whose
-    extensions are in :data:`SUPPORTED_EXTENSIONS` or whose basename is in
-    :data:`SUPPORTED_FILENAMES`.
+    """Recursively walks a repository directory and returns indexable files.
 
-    Directories listed in :data:`SKIP_DIRS` are pruned entirely so that
-    vendor code, caches, and virtual-environments are never visited.
-    HTML/CSS assets and files under ``static/`` / ``assets/`` are skipped.
+    Directories listed in :data:`SKIP_DIRS` are pruned entirely. Binary assets
+    are skipped by extension. HTML/Jinja templates and text under ``static/``
+    are indexed when they use supported extensions.
     """
 
     def walk(self, repo_path: Path) -> list[tuple[str, str, str]]:
         """Return ``[(relative_path, full_path, language), ...]``."""
-        results: list[tuple[str, str, str]] = []
+        indexed, _ = self.walk_with_stats(repo_path)
+        return indexed
+
+    def walk_with_stats(
+        self, repo_path: Path
+    ) -> tuple[list[tuple[str, str, str]], list[str]]:
+        """Return indexed files and relative paths skipped as binary/unsupported."""
+        indexed: list[tuple[str, str, str]] = []
+        skipped: list[str] = []
 
         for full_path in repo_path.rglob("*"):
             if full_path.is_dir():
                 continue
-            if self._should_skip(full_path, repo_path):
+            if self._is_under_skip_dir(full_path, repo_path):
+                continue
+
+            relative = str(full_path.relative_to(repo_path))
+            suffix = full_path.suffix.lower()
+
+            if suffix in SKIP_BINARY_EXTENSIONS:
+                skipped.append(relative)
                 continue
 
             language = self._resolve_language(full_path)
             if language is None:
+                if suffix not in SKIP_EXTENSIONS:
+                    skipped.append(relative)
                 continue
 
-            relative = str(full_path.relative_to(repo_path))
-            results.append((relative, str(full_path), language))
+            indexed.append((relative, str(full_path), language))
 
-        logger.info("Found %d supported files in %s", len(results), repo_path)
-        return results
+        logger.info(
+            "Found %d supported files (%d skipped assets) in %s",
+            len(indexed),
+            len(skipped),
+            repo_path,
+        )
+        return indexed, skipped
+
+    @staticmethod
+    def summarize_skipped(skipped_paths: list[str]) -> str:
+        """Return a compact human-readable summary of skipped paths."""
+        if not skipped_paths:
+            return ""
+
+        by_top: dict[str, list[str]] = {}
+        for path in skipped_paths:
+            top = path.split("/", 1)[0]
+            by_top.setdefault(top, []).append(path)
+
+        lines: list[str] = []
+        for folder in sorted(by_top):
+            paths = by_top[folder]
+            ext_counts = Counter(Path(p).suffix.lower() or "(no ext)" for p in paths)
+            ext_parts = ", ".join(
+                f"{count} {ext}" for ext, count in ext_counts.most_common(4)
+            )
+            lines.append(f"  {folder}/ — {len(paths)} file(s) ({ext_parts})")
+        return "\n".join(lines)
 
     @staticmethod
     def _resolve_language(full_path: Path) -> str | None:
@@ -98,13 +183,9 @@ class FileWalker:
         return SUPPORTED_FILENAMES.get(full_path.name.lower())
 
     @staticmethod
-    def _should_skip(path: Path, base: Path) -> bool:
-        """Return True if any component of the path (relative to base) is a
-        directory that must be skipped."""
+    def _is_under_skip_dir(path: Path, base: Path) -> bool:
         try:
             relative_parts = path.relative_to(base).parts
         except ValueError:
             return False
-        if frozenset(relative_parts) & SKIP_DIRS:
-            return True
-        return bool(frozenset(relative_parts) & SKIP_PATH_SEGMENTS)
+        return bool(frozenset(relative_parts) & SKIP_DIRS)

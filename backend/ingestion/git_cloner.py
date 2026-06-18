@@ -47,8 +47,17 @@ class GitCloner:
         auth_url = self._inject_token(repo_url)
 
         if clone_path.exists() and (clone_path / ".git").exists():
-            logger.info("Repo %s already cloned — pulling latest", repo_id)
+            logger.info("Repo %s already cloned — checking out %s and pulling", repo_id, branch)
             repo = Repo(clone_path)
+            try:
+                repo.git.checkout(branch)
+            except GitCommandError as exc:
+                logger.warning(
+                    "Could not checkout branch=%s for %s (%s); continuing on current branch",
+                    branch,
+                    repo_id,
+                    exc,
+                )
             repo.remotes.origin.pull()
         else:
             clone_path.mkdir(parents=True, exist_ok=True)

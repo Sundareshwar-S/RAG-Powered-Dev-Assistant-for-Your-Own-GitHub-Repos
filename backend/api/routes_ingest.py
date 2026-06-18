@@ -6,6 +6,9 @@ POST /ingest
     Kicks off a background ingestion job for a GitHub repository.
     Returns HTTP 409 if the same repo is already being ingested.
 
+GET /ingest/{job_id}
+    One-shot JSON snapshot of job state (for error recovery when SSE drops).
+
 GET /ingest/{job_id}/status
     Server-Sent Events (SSE) stream that pushes progress updates every
     second until the job completes or fails.
@@ -104,7 +107,7 @@ async def _run_ingest(
 ) -> None:
     """Background task that runs the full ingestion pipeline."""
     try:
-        chroma_writer = ChromaWriter()
+        chroma_writer = ChromaWriter(client=chroma_client)
         orchestrator = IngestionOrchestrator(
             chroma_writer=chroma_writer,
             embed_service=embed_service,
@@ -125,11 +128,18 @@ async def _run_ingest(
         )
 
         logger.info(
-            "Ingest job %s completed: %d chunks indexed",
+            "Ingest job %s completed: %d files, %d chunks indexed (%d assets skipped)",
             job_id,
+            result.get("files_indexed", 0),
             result.get("chunks_indexed", 0),
+            result.get("files_skipped", 0),
         )
-        job_store.complete_job(job_id)
+        job_store.complete_job(
+            job_id,
+            files_indexed=result.get("files_indexed"),
+            chunks_indexed=result.get("chunks_indexed"),
+            files_skipped=result.get("files_skipped"),
+        )
 
     except Exception as exc:  # noqa: BLE001
         error_msg = str(exc)
@@ -141,6 +151,34 @@ async def _run_ingest(
             hypothesis_id="H5",
         )
         job_store.fail_job(job_id, error_msg)
+
+
+def _job_payload(job_id: str, job: dict) -> dict:
+    return {
+        "job_id": job_id,
+        "status": job["status"],
+        "progress": job["progress"],
+        "phase": job.get("phase", ""),
+        "current_file": job["current_file"],
+        "error": job["error"],
+        "files_indexed": job.get("files_indexed"),
+        "chunks_indexed": job.get("chunks_indexed"),
+        "files_skipped": job.get("files_skipped"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /ingest/{job_id} — one-shot job snapshot
+# ---------------------------------------------------------------------------
+
+
+@router.get("/ingest/{job_id}")
+async def get_ingest_job(job_id: str) -> dict:
+    """Return the current state of an ingestion job as JSON."""
+    job = job_store.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail={"error": "Job not found", "job_id": job_id})
+    return _job_payload(job_id, job)
 
 
 # ---------------------------------------------------------------------------
@@ -177,16 +215,7 @@ async def _sse_generator(job_id: str) -> AsyncIterator[str]:
             yield f"data: {payload}\n\n"
             return
 
-        payload = json.dumps(
-            {
-                "job_id": job_id,
-                "status": job["status"],
-                "progress": job["progress"],
-                "phase": job.get("phase", ""),
-                "current_file": job["current_file"],
-                "error": job["error"],
-            }
-        )
+        payload = json.dumps(_job_payload(job_id, job))
         yield f"data: {payload}\n\n"
 
         if job["status"] in ("completed", "failed"):

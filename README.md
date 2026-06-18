@@ -197,9 +197,14 @@ Copy [`.env.example`](.env.example) to `.env`. Never commit `.env`.
 | `OLLAMA_URL` | `http://ollama:11434` | LLM chat inference (embeddings run in-process in the backend) |
 | `CHROMA_HOST` | `http://chroma:8000` | ChromaDB HTTP API (internal hostname) |
 | `DEFAULT_LLM_MODEL` | `qwen2.5-coder:7b` | Default chat model |
+| `EMBED_BACKEND` | `sentence_transformers` | Embedding backend (`ollama`, `fastembed`, or `sentence_transformers`) |
 | `EMBED_LOCAL_MODEL` | `nomic-ai/nomic-embed-text-v1` | Local sentence-transformers embed model (768-dim) |
 | `EMBED_LOCAL_BATCH_SIZE` | `64` | In-process embed batch size during ingest/query |
 | `EMBED_LOCAL_DEVICE` | `cpu` | Device for local embeddings (`cpu` or `cuda`) |
+| `AST_MAX_SLIDING_CHUNKS` | `12` | Max sliding-window chunks per code file |
+| `DOC_MAX_SLIDING_CHUNKS` | `0` | Max doc/config chunks (`0` = unlimited) |
+| `HTML_MAX_SLIDING_CHUNKS` | `3` | Max HTML/Jinja template chunks |
+| `NOTEBOOK_MAX_CELLS` | `50` | Max Jupyter cells indexed per `.ipynb` |
 | `MAX_REPO_SIZE_MB` | `500` | Reject repos larger than this |
 | `BM25_CACHE_DIR` | `/bm25_cache` | Persistent BM25 JSON cache directory |
 | `LOG_LEVEL` | `info` | Logging verbosity |
@@ -218,7 +223,7 @@ Copy [`.env.example`](.env.example) to `.env`. Never commit `.env`.
 | `llama3:8b` | ~4.7 GB | Alternative chat model (UI selector) |
 | `nomic-embed-text` | ~0.3 GB | Legacy Ollama embed fallback (primary path is local `nomic-ai/nomic-embed-text-v1`) |
 
-**Ingest tuning:** Large repos (10k+ chunks) embed in-process in the backend — no per-chunk Ollama HTTP. Increase `EMBED_LOCAL_BATCH_SIZE` (e.g. `128`) on machines with more RAM for faster indexing. SSE progress reports three phases: chunking (0–20%), embedding (20–90%), BM25 build (90–100%).
+**Ingest tuning:** Large repos embed in-process in the backend when `EMBED_BACKEND=sentence_transformers` — no per-chunk Ollama HTTP. Supported source types include `.py`, `.js`, `.ts`, `.md`, `.yaml`, `.html`, and `.ipynb` (Jupyter notebooks). Binary assets (images, model weights, `.csv`, etc.) are skipped but listed in the file manifest. Increase `EMBED_LOCAL_BATCH_SIZE` (e.g. `128`) on machines with more RAM for faster indexing. SSE progress reports three phases: chunking (0–20%), embedding (20–90%), BM25 build (90–100%).
 
 ---
 
@@ -256,6 +261,8 @@ pytest tests/test_phase1_integration.py tests/test_phase2_retrieval.py -v
 | HTTP 429 | Rate limit exceeded — ingest 5/min, query 20/min |
 | Healthcheck never passes | Check `docker compose ps`; Ollama/Chroma healthchecks use `curl` inside containers |
 | Empty retrieval / low-confidence answer | Guardrail returns a canned message when best chunk score < 0.10 |
+| Always ~20 chunks / empty structure answers | Re-index after updating ingest settings (re-ingest clears old index automatically). Ensure `EMBED_BACKEND=sentence_transformers` and `AST_MAX_SLIDING_CHUNKS=12`. ML repos need `.ipynb` notebooks indexed — delete and re-index if chunk count stays low |
+| Structure query says "no files under file/" | Fixed in query intent — rebuild backend and re-index; ask "what's the file structure" again |
 
 ---
 

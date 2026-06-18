@@ -87,10 +87,13 @@ services:
       - DEFAULT_LLM_MODEL=qwen2.5-coder:7b
       - OLLAMA_NUM_CTX=2048
       - EMBED_LOCAL_MODEL=nomic-ai/nomic-embed-text-v1
+      - EMBED_BACKEND=sentence_transformers
+      - EMBED_BATCH_SIZE=8
       - EMBED_LOCAL_BATCH_SIZE=64
       - EMBED_LOCAL_DEVICE=cpu
-      - CHROMA_UPSERT_BATCH_SIZE=500
-      - EMBED_KEEP_ALIVE=30m
+      - INGEST_FLUSH_SIZE=64
+      - CHROMA_UPSERT_BATCH_SIZE=128
+      - EMBED_KEEP_ALIVE=5m
       - OLLAMA_CHAT_KEEP_ALIVE=10m
       - OLLAMA_READ_TIMEOUT=600
       - DEBUG_TIMING=true

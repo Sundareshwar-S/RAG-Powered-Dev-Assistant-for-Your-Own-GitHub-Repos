@@ -116,7 +116,7 @@ class Greeter:
 
     names = {c["symbol_name"] for c in chunks}
     assert "hello" in names, f"Expected 'hello' in chunk names, got {names}"
-    assert "Greeter" in names, f"Expected 'Greeter' in chunk names, got {names}"
+    assert "greet" in names, f"Expected method 'greet' in chunk names, got {names}"
 
     for chunk in chunks:
         assert chunk["start_line"] >= 1

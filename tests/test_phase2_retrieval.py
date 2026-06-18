@@ -415,7 +415,7 @@ class TestHybridRetriever:
         with patch.object(retriever._reranker, "rerank", return_value=corpus[:1]):
             await retriever.retrieve("foo")
 
-        mock_embed.embed_batch.assert_called_once_with(["foo"], keep_alive="0")
+        mock_embed.embed_batch.assert_called_once_with(["foo"], keep_alive="0", task="query")
 
 
 # ---------------------------------------------------------------------------
