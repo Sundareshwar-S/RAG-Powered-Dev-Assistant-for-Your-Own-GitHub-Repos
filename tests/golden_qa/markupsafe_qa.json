@@ -1,0 +1,185 @@
+[
+  {
+    "question": "What does the escape function do in markupsafe?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape",
+    "match_mode": "symbol",
+    "answer_keywords": ["escape", "html", "Markup", "special characters"]
+  },
+  {
+    "question": "How does markupsafe escape HTML special characters like < and &?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape",
+    "match_mode": "symbol",
+    "answer_keywords": ["escape", "Markup", "html", "<"]
+  },
+  {
+    "question": "What is the Markup class in markupsafe?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "symbol",
+    "answer_keywords": ["Markup", "safe", "string", "HTML"]
+  },
+  {
+    "question": "How does Markup.unescape work?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "unescape",
+    "match_mode": "file",
+    "answer_keywords": ["unescape", "html", "entities", "Markup"]
+  },
+  {
+    "question": "What does Markup.striptags do?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "striptags",
+    "match_mode": "file",
+    "answer_keywords": ["striptags", "tags", "strip", "HTML"]
+  },
+  {
+    "question": "How does markupsafe handle None values in escape?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape_silent",
+    "match_mode": "symbol",
+    "answer_keywords": ["None", "empty", "escape_silent", "Markup"]
+  },
+  {
+    "question": "What is escape_silent and how is it different from escape?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape_silent",
+    "match_mode": "symbol",
+    "answer_keywords": ["escape_silent", "None", "empty", "escape"]
+  },
+  {
+    "question": "How does the Markup class format strings safely?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["format", "escape", "Markup", "safe"]
+  },
+  {
+    "question": "What is soft_str in markupsafe?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "soft_str",
+    "match_mode": "symbol",
+    "answer_keywords": ["soft_str", "string", "convert", "str"]
+  },
+  {
+    "question": "How does Markup concatenation work when adding a plain string?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["__add__", "escape", "Markup", "concatenation"]
+  },
+  {
+    "question": "What is _MarkupEscapeHelper and what is its purpose?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "_MarkupEscapeHelper",
+    "match_mode": "symbol",
+    "answer_keywords": ["_MarkupEscapeHelper", "format", "escape", "helper"]
+  },
+  {
+    "question": "How does Markup implement the mod operator for string formatting?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["__mod__", "format", "escape", "percent"]
+  },
+  {
+    "question": "What characters does markupsafe escape in HTML?",
+    "expected_file": "src/markupsafe/_native.py",
+    "expected_symbol": "escape",
+    "match_mode": "file_or_symbol",
+    "answer_keywords": ["&", "<", ">", "\"", "'"]
+  },
+  {
+    "question": "How is the native Python escape implementation written?",
+    "expected_file": "src/markupsafe/_native.py",
+    "expected_symbol": "escape",
+    "match_mode": "file_or_symbol",
+    "answer_keywords": ["replace", "_native", "escape", "Markup"]
+  },
+  {
+    "question": "What does the _native module provide in markupsafe?",
+    "expected_file": "src/markupsafe/_native.py",
+    "expected_symbol": "escape",
+    "match_mode": "file",
+    "answer_keywords": ["native", "pure", "Python", "fallback"]
+  },
+  {
+    "question": "How does Markup inherit from str?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "symbol",
+    "answer_keywords": ["str", "subclass", "inherit", "Markup"]
+  },
+  {
+    "question": "How does Markup.escape classmethod work?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape",
+    "match_mode": "symbol",
+    "answer_keywords": ["classmethod", "escape", "Markup", "cls"]
+  },
+  {
+    "question": "What happens when you multiply a Markup object?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["__mul__", "__rmul__", "Markup", "multiply"]
+  },
+  {
+    "question": "How does markupsafe prevent double-escaping already safe content?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape",
+    "match_mode": "symbol",
+    "answer_keywords": ["Markup", "__html__", "safe", "isinstance"]
+  },
+  {
+    "question": "What is the __html__ protocol in markupsafe?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["__html__", "protocol", "safe", "escape"]
+  },
+  {
+    "question": "How does Markup.format escape its arguments?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["format", "escape", "arguments", "_MarkupEscapeHelper"]
+  },
+  {
+    "question": "What is the return type of the escape function?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape",
+    "match_mode": "symbol",
+    "answer_keywords": ["Markup", "return", "type", "str"]
+  },
+  {
+    "question": "How does markupsafe handle objects with an __html__ method?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "escape",
+    "match_mode": "symbol",
+    "answer_keywords": ["__html__", "escape", "callable", "safe"]
+  },
+  {
+    "question": "What does Markup.__radd__ do?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["__radd__", "escape", "Markup", "add"]
+  },
+  {
+    "question": "How is markupsafe imported and what does its __all__ export?",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "Markup",
+    "match_mode": "file",
+    "answer_keywords": ["__all__", "Markup", "escape", "import"]
+  },
+  {
+    "question": "What's in this repo? Give an overview of the main files and modules.",
+    "expected_file": "src/markupsafe/__init__.py",
+    "expected_symbol": "",
+    "match_mode": "coverage",
+    "min_chunks_in_context": 0.9,
+    "answer_keywords": ["markupsafe", "Markup", "escape"]
+  }
+]

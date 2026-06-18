@@ -1,0 +1,12 @@
+.env
+chroma_data/
+ollama_models/
+ollama_models/ollama.log
+repos_cache/
+bm25_cache/
+__pycache__/
+*.pyc
+node_modules/
+dist/
+.pytest_cache/
+*.egg-info/
