@@ -11,29 +11,41 @@ def build_manifest_chunks(
     indexed_paths: list[str],
     *,
     skipped_summary: str = "",
+    truncated_paths: list[str] | None = None,
 ) -> list[dict]:
     """Return manifest chunk dicts describing the indexed file tree.
 
     For large repos the tree is split into multiple ``file_manifest`` chunks.
     """
     paths = sorted({p.replace("\\", "/") for p in indexed_paths if p})
-    if not paths:
+    if not paths and not skipped_summary:
         return []
 
     chunks: list[dict] = []
-    for start in range(0, len(paths), MAX_PATHS_PER_CHUNK):
-        batch = paths[start : start + MAX_PATHS_PER_CHUNK]
-        tree_text = format_tree(batch)
+    batches = [paths[i : i + MAX_PATHS_PER_CHUNK] for i in range(0, len(paths), MAX_PATHS_PER_CHUNK)]
+    if not batches:
+        batches = [[]]
+
+    for batch_index, batch in enumerate(batches):
+        tree_text = format_tree(batch) if batch else "(no searchable files)"
         header = (
-            "Repository file index (searchable source files indexed for Q&A):\n"
+            f"Repository file index — searchable text files ({len(paths)} total):\n"
         )
         text = header + tree_text
-        if skipped_summary and start == 0:
-            text += (
-                "\n\nExcluded from indexing (binary/assets — present on disk but "
-                "not searchable):\n"
-                + skipped_summary
-            )
+
+        if batch_index == 0:
+            if truncated_paths:
+                text += (
+                    "\n\nPartially indexed (first "
+                    f"{len(truncated_paths)} file(s) truncated to size limit):\n"
+                    + "\n".join(f"  {p}" for p in sorted(truncated_paths))
+                )
+            if skipped_summary:
+                text += (
+                    "\n\nExcluded from search (binary/non-text — on disk only):\n"
+                    + skipped_summary
+                )
+
         chunks.append(
             {
                 "text": text,

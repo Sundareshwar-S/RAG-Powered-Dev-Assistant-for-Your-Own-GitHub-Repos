@@ -22,6 +22,21 @@ _GITHUB_REPO_RE = re.compile(
     re.IGNORECASE,
 )
 
+_NETWORK_GIT_ERROR_MARKERS = (
+    "could not resolve host",
+    "unable to access",
+    "could not connect",
+    "connection timed out",
+    "network is unreachable",
+    "name or service not known",
+    "temporary failure in name resolution",
+)
+
+
+def _is_network_git_error(exc: GitCommandError) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _NETWORK_GIT_ERROR_MARKERS)
+
 
 class GitCloner:
     """Shallow-clones a GitHub repo into /tmp/repos/{repo_id}.
@@ -58,7 +73,17 @@ class GitCloner:
                     repo_id,
                     exc,
                 )
-            repo.remotes.origin.pull()
+            try:
+                repo.remotes.origin.pull()
+            except GitCommandError as exc:
+                if _is_network_git_error(exc):
+                    logger.warning(
+                        "git pull failed for %s (%s); continuing with cached clone",
+                        repo_id,
+                        exc,
+                    )
+                else:
+                    raise
         else:
             clone_path.mkdir(parents=True, exist_ok=True)
             logger.info(

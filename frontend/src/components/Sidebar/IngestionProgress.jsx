@@ -17,6 +17,12 @@ export default function IngestionProgress({
     completed: 'Complete',
   }[phase] || null
 
+  const showLargeFileHint =
+    status === 'running' &&
+    phase === 'chunking' &&
+    currentFile &&
+    currentFile.startsWith('Chunking ')
+
   return (
     <div className="ingestion-progress">
       <div className="progress-bar-track">
@@ -53,9 +59,12 @@ export default function IngestionProgress({
               {phaseLabel ? `${phaseLabel} · ${percent}%` : `${percent}%`}
             </span>
             {currentFile && (
-              <span className="progress-file" title={currentFile}>
+              <span className="progress-file progress-file--current" title={currentFile}>
                 {currentFile}
               </span>
+            )}
+            {showLargeFileHint && (
+              <span className="progress-hint">Large file in progress…</span>
             )}
           </>
         )}

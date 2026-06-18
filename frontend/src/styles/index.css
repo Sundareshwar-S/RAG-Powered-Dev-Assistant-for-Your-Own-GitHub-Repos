@@ -234,11 +234,29 @@ body {
 .progress-label--error   { color: var(--danger); }
 
 .progress-file {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 160px;
-  text-align: right;
+}
+
+.progress-file--current {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.progress-hint {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.progress-meta:has(.progress-file--current) {
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 /* ===================================================================

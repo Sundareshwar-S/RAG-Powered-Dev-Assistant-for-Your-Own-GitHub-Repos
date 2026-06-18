@@ -54,3 +54,24 @@ class TestNotebookChunking:
         chunks = NotebookChunker().chunk("not json", "broken.ipynb")
 
         assert chunks == []
+
+    def test_notebook_indexes_all_cells_when_cap_is_zero(self, monkeypatch) -> None:
+        monkeypatch.setattr("core.config.settings.NOTEBOOK_MAX_CELLS", 0)
+
+        from ingestion.notebook_chunker import NotebookChunker
+
+        cells = []
+        for i in range(60):
+            cells.append(
+                {
+                    "cell_type": "code",
+                    "metadata": {},
+                    "source": [f"x_{i} = {i}\n"],
+                }
+            )
+        notebook = {"nbformat": 4, "nbformat_minor": 5, "cells": cells}
+        import json
+
+        chunks = NotebookChunker().chunk(json.dumps(notebook), "big.ipynb")
+
+        assert len(chunks) == 60

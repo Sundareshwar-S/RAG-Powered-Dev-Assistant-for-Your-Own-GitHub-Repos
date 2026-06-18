@@ -5,8 +5,12 @@ import json
 import time
 from pathlib import Path
 
-_DEBUG_LOG = Path("/app/.cursor/debug-92144e.log")
-_SESSION_ID = "92144e"
+_DEBUG_LOG = Path("/app/.cursor/debug-b99bf8.log")
+if not _DEBUG_LOG.parent.exists():
+    _alt = Path(__file__).resolve().parents[2] / ".cursor" / "debug-b99bf8.log"
+    if _alt.parent.exists():
+        _DEBUG_LOG = _alt
+_SESSION_ID = "b99bf8"
 
 
 def agent_debug_log(

@@ -32,7 +32,9 @@ tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 │   │   ├── orchestrator.py
 │   │   ├── git_cloner.py
 │   │   ├── file_walker.py
+│   │   ├── text_probe.py         (detect text-readable files; byte-capped reads)
 │   │   ├── ast_chunker.py
+│   │   ├── notebook_chunker.py   (extract code/markdown cells from .ipynb)
 │   │   ├── embedding_service.py
 │   │   ├── embed_cache.py       (content-hash cache for embedding vectors)
 │   │   ├── manifest_builder.py  (file-tree manifest chunks for structure retrieval)
@@ -106,10 +108,13 @@ tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"]
 │   ├── test_embedding_ingest.py
 │   ├── test_file_target_retriever.py
 │   ├── test_file_walker.py
+│   ├── test_notebook_chunking.py
+│   ├── test_orchestrator_limits.py
 │   ├── test_phase1_integration.py
 │   ├── test_phase2_retrieval.py
 │   ├── test_phase3_e2e.py
 │   ├── test_structure_retriever.py
+│   ├── test_text_probe.py
 │   ├── eval_retrieval.py
 │   ├── eval_generation.py
 │   └── load_test.py

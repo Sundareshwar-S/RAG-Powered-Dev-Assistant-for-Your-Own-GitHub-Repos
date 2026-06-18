@@ -47,7 +47,8 @@ _use_ollama_fallback = False
 def _effective_batch_size() -> int:
     if settings.EMBED_BACKEND == "fastembed":
         return settings.EMBED_FAST_BATCH_SIZE
-    return settings.EMBED_LOCAL_BATCH_SIZE
+    # Never encode more than one flush window per call (avoids OOM in mem_limit containers)
+    return min(settings.EMBED_LOCAL_BATCH_SIZE, max(settings.INGEST_FLUSH_SIZE, 1))
 
 
 def _uses_nomic_prefixes(model_name: str) -> bool:

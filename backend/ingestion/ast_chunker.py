@@ -71,7 +71,35 @@ CHUNK_TOKEN_LIMIT: int = 512
 _TIKTOKEN_ENC = tiktoken.get_encoding("cl100k_base")
 
 DOC_EXTENSIONS: frozenset[str] = frozenset(
-    {".md", ".txt", ".yaml", ".yml", ".json", ".toml", ".ini", ".cfg", ".sh", ".bash"}
+    {
+        ".md",
+        ".txt",
+        ".yaml",
+        ".yml",
+        ".json",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".sh",
+        ".bash",
+        ".csv",
+        ".tsv",
+        ".sql",
+        ".r",
+        ".xml",
+        ".env",
+        ".log",
+        ".rst",
+        ".tex",
+        ".bib",
+        ".gradle",
+        ".properties",
+        ".css",
+        ".scss",
+        ".sass",
+        ".less",
+    }
 )
 HTML_EXTENSIONS: frozenset[str] = frozenset({".html", ".htm", ".jinja", ".jinja2"})
 CODE_EXTENSIONS: frozenset[str] = frozenset(
@@ -298,6 +326,8 @@ class ASTChunker:
 
         while i <= end_line:
             if max_chunks > 0 and len(chunks) >= max_chunks:
+                break
+            if settings.MAX_CHUNKS_PER_FILE > 0 and len(chunks) >= settings.MAX_CHUNKS_PER_FILE:
                 break
             window_end = min(i + window - 1, end_line)
             text = "\n".join(lines[i : window_end + 1])

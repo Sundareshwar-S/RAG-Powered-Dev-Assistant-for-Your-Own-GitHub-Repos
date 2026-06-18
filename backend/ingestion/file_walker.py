@@ -2,6 +2,7 @@ from collections import Counter
 from pathlib import Path
 
 from core.logger import get_logger
+from ingestion.text_probe import is_probably_text
 
 logger = get_logger(__name__)
 
@@ -22,6 +23,7 @@ SUPPORTED_EXTENSIONS: dict[str, str] = {
     ".toml": "plaintext",
     ".ini": "plaintext",
     ".cfg": "plaintext",
+    ".conf": "plaintext",
     ".sh": "plaintext",
     ".bash": "plaintext",
     ".html": "plaintext",
@@ -29,6 +31,22 @@ SUPPORTED_EXTENSIONS: dict[str, str] = {
     ".jinja": "plaintext",
     ".jinja2": "plaintext",
     ".ipynb": "notebook",
+    ".csv": "plaintext",
+    ".tsv": "plaintext",
+    ".sql": "plaintext",
+    ".r": "plaintext",
+    ".xml": "plaintext",
+    ".env": "plaintext",
+    ".log": "plaintext",
+    ".rst": "markdown",
+    ".tex": "plaintext",
+    ".bib": "plaintext",
+    ".gradle": "plaintext",
+    ".properties": "plaintext",
+    ".css": "plaintext",
+    ".scss": "plaintext",
+    ".sass": "plaintext",
+    ".less": "plaintext",
 }
 
 # Extensionless files indexed as plaintext when the basename matches exactly.
@@ -38,9 +56,6 @@ SUPPORTED_FILENAMES: dict[str, str] = {
     "jenkinsfile": "plaintext",
     "readme": "markdown",
 }
-
-# Stylesheets are low-value for code search and are not reported as skipped.
-SKIP_EXTENSIONS: frozenset[str] = frozenset({".css", ".scss", ".sass", ".less"})
 
 # Binary / media / model artifacts — skipped regardless of directory.
 SKIP_BINARY_EXTENSIONS: frozenset[str] = frozenset(
@@ -75,6 +90,7 @@ SKIP_BINARY_EXTENSIONS: frozenset[str] = frozenset(
         ".pth",
         ".onnx",
         ".safetensors",
+        ".parquet",
         ".exe",
         ".dll",
         ".so",
@@ -107,8 +123,8 @@ class FileWalker:
     """Recursively walks a repository directory and returns indexable files.
 
     Directories listed in :data:`SKIP_DIRS` are pruned entirely. Binary assets
-    are skipped by extension. HTML/Jinja templates and text under ``static/``
-    are indexed when they use supported extensions.
+    are skipped by extension. Unknown extensions are indexed when they appear
+    to be UTF-8 text.
     """
 
     def walk(self, repo_path: Path) -> list[tuple[str, str, str]]:
@@ -119,7 +135,7 @@ class FileWalker:
     def walk_with_stats(
         self, repo_path: Path
     ) -> tuple[list[tuple[str, str, str]], list[str]]:
-        """Return indexed files and relative paths skipped as binary/unsupported."""
+        """Return indexed files and relative paths skipped as binary/non-text."""
         indexed: list[tuple[str, str, str]] = []
         skipped: list[str] = []
 
@@ -138,9 +154,11 @@ class FileWalker:
 
             language = self._resolve_language(full_path)
             if language is None:
-                if suffix not in SKIP_EXTENSIONS:
+                if is_probably_text(full_path):
+                    language = "plaintext"
+                else:
                     skipped.append(relative)
-                continue
+                    continue
 
             indexed.append((relative, str(full_path), language))
 
@@ -176,11 +194,12 @@ class FileWalker:
     @staticmethod
     def _resolve_language(full_path: Path) -> str | None:
         suffix = full_path.suffix.lower()
-        if suffix in SKIP_EXTENSIONS:
-            return None
         if suffix in SUPPORTED_EXTENSIONS:
             return SUPPORTED_EXTENSIONS[suffix]
-        return SUPPORTED_FILENAMES.get(full_path.name.lower())
+        basename = full_path.name.lower()
+        if basename.endswith(".r"):
+            return "plaintext"
+        return SUPPORTED_FILENAMES.get(basename)
 
     @staticmethod
     def _is_under_skip_dir(path: Path, base: Path) -> bool:

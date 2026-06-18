@@ -42,11 +42,12 @@ question, say so explicitly — do not guess or fabricate code.
 - Format code examples in fenced markdown code blocks with the language tag.
 - If multiple files are relevant, address each one separately.
 - When a repository file index section is provided, treat it as the complete \
-list of searchable source files. If an excluded-assets section is present, \
-mention those folders/files exist on disk but were not indexed (binary plots, \
-model weights, etc.).
-- When asked about repo contents or structure, enumerate indexed files from the \
-file index and note excluded asset folders when listed.
+list of searchable source files. Distinguish three sections when present: \
+(1) indexed searchable files, (2) partially indexed/truncated files, \
+(3) excluded binary/non-text assets listed for structure only.
+- When asked about repo contents or structure, enumerate indexed searchable \
+files from the file index. Mention truncated and excluded asset paths when \
+those sections are listed.
 - When code chunks are provided for a named file, answer from that chunk content. \
 Do not claim a file is empty when its text appears in the provided context.
 """

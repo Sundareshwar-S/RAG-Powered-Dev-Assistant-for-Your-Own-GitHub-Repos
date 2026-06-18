@@ -38,6 +38,7 @@ from ingestion.file_walker import FileWalker
 from ingestion.git_cloner import GitCloner
 from ingestion.manifest_builder import build_manifest_chunks
 from ingestion.notebook_chunker import NotebookChunker
+from ingestion.text_probe import max_index_bytes, read_text_capped
 from core.dependencies import invalidate_bm25_cache
 from core.logger import get_logger
 
@@ -218,54 +219,113 @@ class IngestionOrchestrator:
         buffer: list[dict] = []
         chunks_seen = 0
         total_indexed = 0
+        total_chunks_produced = 0
         chunked_paths: list[str] = []
+        truncated_paths: list[str] = []
+        max_total_chunks = settings.INGEST_MAX_TOTAL_CHUNKS
+        expected_chunks = max(total_files * 15, 1)
+        hit_total_chunk_cap = False
 
-        async def _report_embedding_progress() -> None:
+        async def _report_embedding_progress(label: str | None = None) -> None:
             if progress_callback is None:
                 return
             total = max(chunks_seen, total_indexed, 1)
             embed_fraction = total_indexed / total
             embed_progress = CHUNKING_WEIGHT + EMBEDDING_WEIGHT * embed_fraction
-            await progress_callback(
-                "embedding",
-                embed_progress,
-                f"Embedding chunks {total_indexed}/{total}",
-            )
+            msg = label or f"Embedding chunks {total_indexed}/{total}"
+            await progress_callback("embedding", embed_progress, msg)
 
-        async def _flush_buffer() -> None:
+        async def _flush_buffer(label: str | None = None) -> None:
             nonlocal total_indexed
             while len(buffer) >= flush_size:
                 batch = buffer[:flush_size]
                 del buffer[:flush_size]
+                if progress_callback is not None:
+                    await progress_callback(
+                        "embedding",
+                        CHUNKING_WEIGHT,
+                        label or f"Embedding batch ({total_indexed + len(batch)} chunks so far)",
+                    )
                 total_indexed += await self._embed_and_upsert_batch(
                     batch, collection_name, repo_id
                 )
                 await _report_embedding_progress()
 
+        async def _report_chunking_progress(
+            idx: int,
+            rel_path: str,
+            *,
+            pre_file: bool = False,
+        ) -> None:
+            if progress_callback is None:
+                return
+            file_frac = idx / max(total_files, 1)
+            chunk_frac = min(chunks_seen / expected_chunks, 1.0)
+            chunk_progress = CHUNKING_WEIGHT * (0.5 * file_frac + 0.5 * chunk_frac)
+            if pre_file:
+                label = f"Chunking {rel_path} ({idx + 1}/{total_files})"
+            else:
+                label = f"Chunked {rel_path} ({idx + 1}/{total_files})"
+            await progress_callback("chunking", chunk_progress, label)
+
         for idx, (rel_path, full_path, language) in enumerate(files):
+            if max_total_chunks > 0 and total_chunks_produced >= max_total_chunks:
+                hit_total_chunk_cap = True
+                logger.warning(
+                    "[%s] Reached INGEST_MAX_TOTAL_CHUNKS=%d — skipping remaining files",
+                    repo_id,
+                    max_total_chunks,
+                )
+                break
+
+            await _report_chunking_progress(idx, rel_path, pre_file=True)
+
             try:
-                source = open(  # noqa: WPS515
-                    full_path, encoding="utf-8", errors="replace"
-                ).read()
-                chunks = _chunk_file(source, rel_path, language)
+                source, truncated = read_text_capped(
+                    Path(full_path), max_index_bytes()
+                )
+                if truncated:
+                    truncated_paths.append(rel_path)
+                    logger.info(
+                        "[%s] Truncated large file to %d MB: %s",
+                        repo_id,
+                        settings.MAX_INDEX_FILE_MB,
+                        rel_path,
+                    )
+                chunks = await asyncio.to_thread(
+                    _chunk_file, source, rel_path, language
+                )
                 chunks = [c for c in chunks if c.get("text", "").strip()]
                 if chunks:
                     chunked_paths.append(rel_path)
                 chunks = [_with_embed_prefix(c) for c in chunks]
-                buffer.extend(chunks)
-                chunks_seen += len(chunks)
+
+                for chunk in chunks:
+                    if (
+                        max_total_chunks > 0
+                        and total_chunks_produced >= max_total_chunks
+                    ):
+                        hit_total_chunk_cap = True
+                        break
+                    buffer.append(chunk)
+                    chunks_seen += 1
+                    total_chunks_produced += 1
+                    if len(buffer) >= flush_size:
+                        await _flush_buffer()
+
+                if hit_total_chunk_cap:
+                    logger.warning(
+                        "[%s] Reached INGEST_MAX_TOTAL_CHUNKS=%d during %s",
+                        repo_id,
+                        max_total_chunks,
+                        rel_path,
+                    )
+                    break
             except Exception as exc:
                 logger.warning("Skipping %s: %s", rel_path, exc)
 
             await _flush_buffer()
-
-            if progress_callback is not None:
-                chunk_progress = CHUNKING_WEIGHT * (idx + 1) / max(total_files, 1)
-                await progress_callback(
-                    "chunking",
-                    chunk_progress,
-                    f"Chunking files {idx + 1}/{total_files}",
-                )
+            await _report_chunking_progress(idx, rel_path)
 
         if buffer:
             batch = buffer[:]
@@ -276,8 +336,9 @@ class IngestionOrchestrator:
             await _report_embedding_progress()
 
         manifest_chunks = build_manifest_chunks(
-            chunked_paths,
+            indexed_paths,
             skipped_summary=skipped_summary,
+            truncated_paths=truncated_paths,
         )
         manifest_chunks = [_with_embed_prefix(c) for c in manifest_chunks]
         chunks_seen += len(manifest_chunks)
@@ -291,10 +352,14 @@ class IngestionOrchestrator:
         buffer.clear()
 
         logger.info(
-            "[%s] Total chunks indexed: %d (including %d manifest)",
+            "[%s] Total chunks indexed: %d (including %d manifest; "
+            "%d files chunked, %d truncated, %d skipped)",
             repo_id,
             total_indexed,
             len(manifest_chunks),
+            len(chunked_paths),
+            len(truncated_paths),
+            len(skipped_paths),
         )
 
         if total_indexed == 0:

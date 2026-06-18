@@ -48,7 +48,21 @@ def test_file_walker_indexes_html_and_static_js(tmp_path: Path) -> None:
     indexed, skipped = FileWalker().walk_with_stats(tmp_path)
     found = {rel for rel, _, _ in indexed}
 
-    assert found == {"main.py", "templates/index.html", "static/app.js"}
+    assert found == {"main.py", "templates/index.html", "static/app.js", "styles.css"}
+    assert skipped == []
+
+
+def test_file_walker_indexes_csv_and_unknown_text(tmp_path: Path) -> None:
+    from ingestion.file_walker import FileWalker
+
+    (tmp_path / "data.csv").write_text("col1,col2\n1,2\n")
+    (tmp_path / "custom.foo").write_text("custom text content\n")
+
+    indexed, skipped = FileWalker().walk_with_stats(tmp_path)
+    found = {rel for rel, _, _ in indexed}
+
+    assert "data.csv" in found
+    assert "custom.foo" in found
     assert skipped == []
 
 

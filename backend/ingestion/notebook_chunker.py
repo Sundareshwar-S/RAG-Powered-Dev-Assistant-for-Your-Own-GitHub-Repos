@@ -28,9 +28,12 @@ class NotebookChunker:
             return []
 
         max_cells = settings.NOTEBOOK_MAX_CELLS
+        cell_iter = cells if max_cells <= 0 else cells[:max_cells]
         chunks: list[dict] = []
 
-        for index, cell in enumerate(cells[:max_cells]):
+        for index, cell in enumerate(cell_iter):
+            if settings.MAX_CHUNKS_PER_FILE > 0 and len(chunks) >= settings.MAX_CHUNKS_PER_FILE:
+                break
             if not isinstance(cell, dict):
                 continue
 
@@ -100,6 +103,8 @@ class NotebookChunker:
 
         while i < len(lines):
             if max_chunks > 0 and len(chunks) >= max_chunks:
+                break
+            if settings.MAX_CHUNKS_PER_FILE > 0 and len(chunks) >= settings.MAX_CHUNKS_PER_FILE:
                 break
             window_end = min(i + window - 1, len(lines) - 1)
             window_text = "\n".join(lines[i : window_end + 1]).strip()

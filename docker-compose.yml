@@ -73,6 +73,7 @@ services:
   # ─────────────────────────────────────────────────────────────────
   backend:
     build: ./backend
+    mem_limit: 4g
     ports:
       - "8000:8000"
     volumes:
@@ -89,10 +90,16 @@ services:
       - EMBED_LOCAL_MODEL=nomic-ai/nomic-embed-text-v1
       - EMBED_BACKEND=sentence_transformers
       - EMBED_BATCH_SIZE=8
-      - EMBED_LOCAL_BATCH_SIZE=64
+      - EMBED_LOCAL_BATCH_SIZE=16
       - EMBED_LOCAL_DEVICE=cpu
-      - INGEST_FLUSH_SIZE=64
-      - CHROMA_UPSERT_BATCH_SIZE=128
+      - INGEST_FLUSH_SIZE=32
+      - MAX_CHUNKS_PER_FILE=80
+      - INGEST_MAX_TOTAL_CHUNKS=3000
+      - AST_MAX_SLIDING_CHUNKS=40
+      - HTML_MAX_SLIDING_CHUNKS=20
+      - NOTEBOOK_MAX_CELLS=100
+      - MAX_INDEX_FILE_MB=2
+      - CHROMA_UPSERT_BATCH_SIZE=32
       - EMBED_KEEP_ALIVE=5m
       - OLLAMA_CHAT_KEEP_ALIVE=10m
       - OLLAMA_READ_TIMEOUT=600

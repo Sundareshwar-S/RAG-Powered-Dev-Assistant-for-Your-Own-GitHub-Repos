@@ -201,10 +201,11 @@ Copy [`.env.example`](.env.example) to `.env`. Never commit `.env`.
 | `EMBED_LOCAL_MODEL` | `nomic-ai/nomic-embed-text-v1` | Local sentence-transformers embed model (768-dim) |
 | `EMBED_LOCAL_BATCH_SIZE` | `64` | In-process embed batch size during ingest/query |
 | `EMBED_LOCAL_DEVICE` | `cpu` | Device for local embeddings (`cpu` or `cuda`) |
-| `AST_MAX_SLIDING_CHUNKS` | `12` | Max sliding-window chunks per code file |
-| `DOC_MAX_SLIDING_CHUNKS` | `0` | Max doc/config chunks (`0` = unlimited) |
-| `HTML_MAX_SLIDING_CHUNKS` | `3` | Max HTML/Jinja template chunks |
-| `NOTEBOOK_MAX_CELLS` | `50` | Max Jupyter cells indexed per `.ipynb` |
+| `AST_MAX_SLIDING_CHUNKS` | `0` | Max sliding-window chunks per code file (`0` = unlimited) |
+| `DOC_MAX_SLIDING_CHUNKS` | `0` | Max chunks for docs/config (`0` = unlimited) |
+| `HTML_MAX_SLIDING_CHUNKS` | `0` | Max chunks for HTML/Jinja templates (`0` = unlimited) |
+| `NOTEBOOK_MAX_CELLS` | `0` | Max Jupyter cells per `.ipynb` (`0` = unlimited) |
+| `MAX_INDEX_FILE_MB` | `5` | Max megabytes read per file (larger files truncated) |
 | `MAX_REPO_SIZE_MB` | `500` | Reject repos larger than this |
 | `BM25_CACHE_DIR` | `/bm25_cache` | Persistent BM25 JSON cache directory |
 | `LOG_LEVEL` | `info` | Logging verbosity |
@@ -223,7 +224,7 @@ Copy [`.env.example`](.env.example) to `.env`. Never commit `.env`.
 | `llama3:8b` | ~4.7 GB | Alternative chat model (UI selector) |
 | `nomic-embed-text` | ~0.3 GB | Legacy Ollama embed fallback (primary path is local `nomic-ai/nomic-embed-text-v1`) |
 
-**Ingest tuning:** Large repos embed in-process in the backend when `EMBED_BACKEND=sentence_transformers` — no per-chunk Ollama HTTP. Supported source types include `.py`, `.js`, `.ts`, `.md`, `.yaml`, `.html`, and `.ipynb` (Jupyter notebooks). Binary assets (images, model weights, `.csv`, etc.) are skipped but listed in the file manifest. Increase `EMBED_LOCAL_BATCH_SIZE` (e.g. `128`) on machines with more RAM for faster indexing. SSE progress reports three phases: chunking (0–20%), embedding (20–90%), BM25 build (90–100%).
+**Ingest tuning:** All UTF-8-readable text files are indexed — including `.csv`, `.css`, `.sql`, logs, and unknown extensions detected as text. Binary assets (images, model weights, `.parquet`, archives) are listed in the file manifest only, not embedded. Chunk caps default to **unlimited** (`AST/HTML/NOTEBOOK *_MAX_* = 0`). Large files are truncated at `MAX_INDEX_FILE_MB` (default 5 MB). Use `EMBED_BACKEND=sentence_transformers` with `EMBED_LOCAL_BATCH_SIZE=128` and `INGEST_FLUSH_SIZE=128` for faster ingests.
 
 ---
 
@@ -261,7 +262,10 @@ pytest tests/test_phase1_integration.py tests/test_phase2_retrieval.py -v
 | HTTP 429 | Rate limit exceeded — ingest 5/min, query 20/min |
 | Healthcheck never passes | Check `docker compose ps`; Ollama/Chroma healthchecks use `curl` inside containers |
 | Empty retrieval / low-confidence answer | Guardrail returns a canned message when best chunk score < 0.10 |
-| Always ~20 chunks / empty structure answers | Re-index after updating ingest settings (re-ingest clears old index automatically). Ensure `EMBED_BACKEND=sentence_transformers` and `AST_MAX_SLIDING_CHUNKS=12`. ML repos need `.ipynb` notebooks indexed — delete and re-index if chunk count stays low |
+| Always ~20 chunks / incomplete answers | Re-index after updating settings. Ensure caps are `0` (unlimited), `EMBED_BACKEND=sentence_transformers`, and check ingest completion stats for files vs chunks |
+| Backend stopped responding / exit 137 during indexing | Backend OOM during embedding — lower `INGEST_FLUSH_SIZE` / `EMBED_LOCAL_BATCH_SIZE` (defaults: 32/16), or set `EMBED_BACKEND=ollama`; rebuild with `docker compose up --build` |
+| `Could not resolve host: github.com` on ingest | Transient Docker/host DNS — run `docker compose up -d`, verify `getent hosts github.com` inside backend; cached clones index offline after the pull fallback |
+| Ingest stuck at ~11% for minutes | One large file is chunking — check backend logs for the filename; tune `MAX_CHUNKS_PER_FILE` / `MAX_INDEX_FILE_MB`; delete repo and re-index |
 | Structure query says "no files under file/" | Fixed in query intent — rebuild backend and re-index; ask "what's the file structure" again |
 
 ---
